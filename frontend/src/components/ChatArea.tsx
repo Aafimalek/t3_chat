@@ -9,6 +9,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { PanelLeftOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useChat } from '@/lib/chat-context';
+import { useAuth, useClerk } from '@clerk/nextjs';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -37,6 +38,9 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
         models
     } = useChat();
 
+    const { isSignedIn } = useAuth();
+    const { openSignIn } = useClerk();
+
     // Auto-scroll to bottom when messages change
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -44,6 +48,13 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
 
     const handleSend = async () => {
         if (!inputValue.trim() || isLoading) return;
+
+        // Check if user is signed in
+        if (!isSignedIn) {
+            openSignIn();
+            return;
+        }
+
         const message = inputValue;
         setInputValue('');
         await sendChatMessage(message);

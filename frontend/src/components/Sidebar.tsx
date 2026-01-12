@@ -6,13 +6,19 @@ import { cn } from '@/lib/utils';
 import {
     Plus,
     PanelLeftClose,
-    LogIn,
     Search,
     Trash2,
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { useChat } from '@/lib/chat-context';
+import {
+    SignInButton,
+    SignUpButton,
+    SignedIn,
+    SignedOut,
+    UserButton,
+} from '@clerk/nextjs';
 
 interface SidebarProps {
     isOpen: boolean;
@@ -88,82 +94,115 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
                     </Button>
                 </div>
 
-                <Button
-                    className="w-full justify-start gap-2 bg-pink-600 hover:bg-pink-700 text-white shadow-lg shadow-pink-900/20"
-                    size="lg"
-                    onClick={startNewChat}
-                >
-                    <Plus size={18} />
-                    <span className="font-semibold">New Chat</span>
-                </Button>
+                {/* New Chat Button - Only for signed in users */}
+                <SignedIn>
+                    <Button
+                        className="w-full justify-start gap-2 bg-pink-600 hover:bg-pink-700 text-white shadow-lg shadow-pink-900/20"
+                        size="lg"
+                        onClick={startNewChat}
+                    >
+                        <Plus size={18} />
+                        <span className="font-semibold">New Chat</span>
+                    </Button>
+                </SignedIn>
             </div>
 
-            {/* Search */}
-            <div className="px-4 pb-2">
-                <div className="relative">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-                    <Input
-                        placeholder="Search your threads..."
-                        className="pl-8 bg-sidebar-accent/50 border-sidebar-border focus-visible:ring-1 focus-visible:ring-sidebar-ring"
-                    />
+            {/* Search - Only for signed in users */}
+            <SignedIn>
+                <div className="px-4 pb-2">
+                    <div className="relative">
+                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+                        <Input
+                            placeholder="Search your threads..."
+                            className="pl-8 bg-sidebar-accent/50 border-sidebar-border focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                        />
+                    </div>
                 </div>
-            </div>
+            </SignedIn>
 
-
-            {/* History List */}
-            <ScrollArea className="flex-1 px-2">
-                <div className="flex flex-col gap-1 p-2">
-                    {Object.entries(groupedConversations).map(([group, convos]) => (
-                        convos.length > 0 && (
-                            <div key={group} className="mb-2">
-                                <p className="text-xs text-muted-foreground/60 px-2 py-1 uppercase tracking-wide">
-                                    {group}
-                                </p>
-                                {convos.map((conv) => (
-                                    <div
-                                        key={conv.id}
-                                        className={cn(
-                                            "flex items-center justify-between h-auto py-3 px-3 w-full text-left font-normal rounded-md cursor-pointer group transition-colors",
-                                            conv.id === conversationId
-                                                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                                : "text-sidebar-foreground hover:bg-sidebar-accent/50",
-                                            isLoading && "opacity-50 pointer-events-none"
-                                        )}
-                                        onClick={() => selectConversation(conv.id)}
-                                    >
-                                        <div className="flex flex-col gap-0.5 overflow-hidden flex-1">
-                                            <span className="truncate text-sm font-medium">{conv.title}</span>
-                                            <span className="text-xs text-muted-foreground/60">
-                                                {conv.message_count} messages
-                                            </span>
-                                        </div>
-                                        <button
-                                            className="h-6 w-6 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive transition-opacity"
-                                            onClick={(e) => handleDeleteConversation(e, conv.id)}
+            {/* History List - Only for signed in users */}
+            <SignedIn>
+                <ScrollArea className="flex-1 px-2">
+                    <div className="flex flex-col gap-1 p-2">
+                        {Object.entries(groupedConversations).map(([group, convos]) => (
+                            convos.length > 0 && (
+                                <div key={group} className="mb-2">
+                                    <p className="text-xs text-muted-foreground/60 px-2 py-1 uppercase tracking-wide">
+                                        {group}
+                                    </p>
+                                    {convos.map((conv) => (
+                                        <div
+                                            key={conv.id}
+                                            className={cn(
+                                                "flex items-center justify-between h-auto py-3 px-3 w-full text-left font-normal rounded-md cursor-pointer group transition-colors",
+                                                conv.id === conversationId
+                                                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                                                    : "text-sidebar-foreground hover:bg-sidebar-accent/50",
+                                                isLoading && "opacity-50 pointer-events-none"
+                                            )}
+                                            onClick={() => selectConversation(conv.id)}
                                         >
-                                            <Trash2 size={14} />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )
-                    ))}
+                                            <div className="flex flex-col gap-0.5 overflow-hidden flex-1">
+                                                <span className="truncate text-sm font-medium">{conv.title}</span>
+                                                <span className="text-xs text-muted-foreground/60">
+                                                    {conv.message_count} messages
+                                                </span>
+                                            </div>
+                                            <button
+                                                className="h-6 w-6 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive transition-opacity"
+                                                onClick={(e) => handleDeleteConversation(e, conv.id)}
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )
+                        ))}
 
-                    {conversations.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-8">
-                            No conversations yet. Start a new chat!
-                        </p>
-                    )}
+                        {conversations.length === 0 && (
+                            <p className="text-sm text-muted-foreground text-center py-8">
+                                No conversations yet. Start a new chat!
+                            </p>
+                        )}
+                    </div>
+                </ScrollArea>
+            </SignedIn>
+
+            {/* Signed Out - Welcome message */}
+            <SignedOut>
+                <div className="flex-1 flex flex-col items-center justify-center px-4 text-center">
+                    <p className="text-sm text-muted-foreground mb-2">
+                        Sign in to start chatting and save your conversations.
+                    </p>
                 </div>
-            </ScrollArea>
+            </SignedOut>
 
-            {/* Footer */}
+            {/* Footer - Auth Section */}
             <div className="p-4 mt-auto border-t border-sidebar-border">
-                <Button variant="ghost" className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent">
-                    <LogIn size={18} />
-                    Login
-                </Button>
+                <SignedOut>
+                    <div className="flex flex-col gap-2">
+                        <SignInButton mode="modal">
+                            <Button className="w-full justify-center gap-2 bg-pink-600 hover:bg-pink-700 text-white">
+                                Sign In
+                            </Button>
+                        </SignInButton>
+                        <SignUpButton mode="modal">
+                            <Button variant="outline" className="w-full justify-center gap-2">
+                                Sign Up
+                            </Button>
+                        </SignUpButton>
+                    </div>
+                </SignedOut>
+                <SignedIn>
+                    <div className="flex items-center gap-3">
+                        <UserButton afterSignOutUrl="/" />
+                        <span className="text-sm text-sidebar-foreground">Account</span>
+                    </div>
+                </SignedIn>
             </div>
         </div>
     );
 }
+
+
