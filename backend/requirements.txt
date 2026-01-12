@@ -1,0 +1,24 @@
+# T3.chat Clone Backend Dependencies
+
+# Core Framework
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+
+# LangChain & LangGraph
+langchain
+langchain-core
+langchain-groq
+langchain-community
+langgraph
+
+# MongoDB
+pymongo
+motor
+langgraph-checkpoint-mongodb
+langgraph-store-mongodb
+
+# Utilities
+python-dotenv
+sse-starlette
