@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # LangSmith (optional)
     langsmith_api_key: str = ""
     langsmith_project: str = "t3-chat-clone"
-    langsmith_tracing: str = "false"
+    langsmith_tracing: str = "true"
     langsmith_endpoint: str = "https://api.smith.langchain.com"
     
     class Config:

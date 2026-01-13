@@ -32,7 +32,7 @@ def get_llm(model_name: str | None = None, streaming: bool = False) -> ChatGroq:
         api_key=settings.groq_api_key,
         model_name=model_name,
         streaming=streaming,
-        temperature=0.7,
+        temperature=0.5,
         max_tokens=4096,
     )
 
