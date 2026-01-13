@@ -35,7 +35,7 @@ const MarkdownRenderer = React.memo(({ content }: MarkdownRendererProps) => {
 
                         if (!isInline) {
                             return (
-                                // @ts-expect-error - style type mismatch between libraries
+
                                 <SyntaxHighlighter
                                     style={oneDark}
                                     language={match![1]}
