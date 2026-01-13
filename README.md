@@ -956,6 +956,101 @@ When a conversation is deleted via [cleanup.py](backend/memory/cleanup.py):
 
 ---
 
+---
+
+## ☁️ Deployment Guide
+
+### Vercel + AWS EC2 Hybrid Architecture
+
+This project uses a hybrid deployment strategy to get the best of both worlds:
+- **Frontend**: Vercel (Edge Network, Fast CDN, Easy CI/CD)
+- **Backend**: AWS EC2 (Full control, Persistent WebSocket/SSE connections, Dockerized DB)
+
+```mermaid
+graph LR
+    User[User Device]
+    Vercel[Vercel Edge Network]
+    AWS[AWS EC2 Instance]
+    
+    subgraph Frontend
+        Vercel -->|Serves| NextJS[Next.js App]
+    end
+    
+    subgraph Backend_AWS
+        NextJS -->|HTTPS| Nginx[Nginx Reverse Proxy]
+        Nginx -->|Proxy Pass| Uvicorn[Uvicorn ASGI]
+        Uvicorn --> FastAPI[FastAPI App]
+        FastAPI --> MongoDB[(MongoDB Docker)]
+    end
+    
+    User -->|https://t3-chat.vercel.app| Vercel
+    User -->|https://api.manimancer.fun| Nginx
+```
+
+### 1. AWS EC2 Setup (Backend)
+
+We deployed the backend to a **t3.small** Ubuntu 24.04 instance.
+
+**Key Steps:**
+1.  **IAM User**: Created a dedicated `AdminUser` instead of using Root (Best Practice).
+2.  **Security Groups**:
+    -   Opened Port `22` (SSH) for admin access.
+    -   Opened Port `80` (HTTP) and `443` (HTTPS) for public access.
+3.  **Dependencies**:
+    -   Installed `nginx`, `git`, `docker.io`, and `uv` (Astral's fast Python package manager).
+    -   Python 3.13 installed via `uv python install 3.13`.
+
+### 2. HTTPS & SSL (Certbot)
+
+Since Vercel requires a secure backend (`https://`), we configured a custom subdomain.
+
+-   **Domain**: `api.manimancer.fun`
+-   **Method**: Nginx + Certbot (Let's Encrypt)
+-   **Installation**: Used `snap` for Certbot (more reliable than apt on Ubuntu 24.04).
+
+### 3. Frontend Deployment (Vercel)
+
+-   **Root Directory**: Set to `frontend/` (Monorepo setup).
+-   **Environment Variable**: `NEXT_PUBLIC_API_URL=https://api.manimancer.fun`.
+
+---
+
+## 🐛 Troubleshooting & Lessons Learned
+
+During the initial deployment (Jan 2026), we encountered and solved several critical issues. This log serves as a reference for future deployments.
+
+### 🔴 Issue 1: 502 Bad Gateway / Service Exit Code
+**Symptoms**: Nginx was running, but `https://api.manimancer.fun/health` returned 502.
+**Logs**: `sudo journalctl -u t3-backend` showed `ModuleNotFoundError: No module named 'motor'`.
+**Cause**: The `pyproject.toml` file was missing several dependencies (`motor`, `pydantic-settings`, etc.) that were present in `requirements.txt` but not the `uv` lockfile.
+**Fix**:
+1.  Updated `pyproject.toml` to include all missing packages.
+2.  Ran `uv sync` to regenerate the environment.
+3.  Restarted service: `sudo systemctl restart t3-backend`.
+
+### 🔴 Issue 2: Dependency Version Conflict
+**Symptoms**: `uv sync` failed with a conflict error.
+**Cause**: `langgraph-checkpoint-mongodb` required `pymongo<4.16`, but `pyproject.toml` pinned `pymongo>=4.16.0`.
+**Fix**: Downgraded requirement to `pymongo>=4.12.0`.
+
+### 🔴 Issue 3: SSH Lockout (Connection Timed Out)
+**Symptoms**: Suddenly unable to SSH into the server (`ssh: connect to host ... port 22: Connection timed out`).
+**Cause**: The admin's home IP address changed (dynamic ISP IP), causing the AWS Security Group rule "My IP" to block the new IP.
+**Fix**:
+1.  Temporarily allowed `0.0.0.0/0` (Anywhere) for Port 22 in AWS Console.
+2.  Used **EC2 Instance Connect** (Browser-based SSH) as a backup.
+
+### 🔴 Issue 4: Certbot Installation Failure
+**Symptoms**: `sudo apt install python3-certbot-nginx` failed with "Unable to locate package".
+**Cause**: Ubuntu 24.04 repositories occasionally miss the Certbot package or require `universe` enabled.
+**Fix**: Switched to the official `snap` installation method:
+```bash
+sudo snap install --classic certbot
+sudo ln -s /snap/bin/certbot /usr/bin/certbot
+```
+
+---
+
 ## 📝 License
 
 This project is for educational purposes.
