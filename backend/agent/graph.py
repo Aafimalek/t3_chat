@@ -10,9 +10,9 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
 from agent.llm_provider import get_llm
-from agent.prompts import SYSTEM_PROMPT
+from agent.prompts import SYSTEM_PROMPT, MEMORY_EXTRACTION_PROMPT
 from memory.checkpointer import get_checkpointer
-from memory.manager import MemoryManager
+from memory.manager import MemoryManager, extract_facts_from_response
 
 
 # ============================================================================
@@ -25,6 +25,8 @@ class ChatState(TypedDict):
     user_id: str
     model_name: str
     memory_context: str
+    last_user_message: str
+    last_assistant_response: str
 
 
 # ============================================================================
@@ -47,10 +49,13 @@ def load_memory(state: ChatState) -> dict:
     memory_manager = MemoryManager(user_id)
     memory_context = memory_manager.get_context_memories(
         query=last_user_msg,
-        limit=5
+        limit=10
     )
     
-    return {"memory_context": memory_context}
+    return {
+        "memory_context": memory_context,
+        "last_user_message": last_user_msg,
+    }
 
 
 def generate_response(state: ChatState) -> dict:
@@ -72,7 +77,50 @@ def generate_response(state: ChatState) -> dict:
     # Generate response
     response = llm.invoke(messages)
     
-    return {"messages": [response]}
+    return {
+        "messages": [response],
+        "last_assistant_response": response.content,
+    }
+
+
+def extract_memories(state: ChatState) -> dict:
+    """Extract facts from the conversation and save to long-term memory."""
+    user_id = state["user_id"]
+    user_message = state.get("last_user_message", "")
+    assistant_response = state.get("last_assistant_response", "")
+    
+    # Skip extraction if no meaningful user message
+    if not user_message or len(user_message) < 10:
+        return {}
+    
+    # Skip for very short exchanges
+    if len(user_message) + len(assistant_response) < 50:
+        return {}
+    
+    try:
+        # Use a fast model for extraction
+        llm = get_llm(model_name="llama-3.1-8b-instant", streaming=False)
+        
+        # Create extraction prompt
+        extraction_prompt = MEMORY_EXTRACTION_PROMPT.format(
+            user_message=user_message,
+            assistant_response=assistant_response,
+        )
+        
+        # Get extraction
+        result = llm.invoke([HumanMessage(content=extraction_prompt)])
+        
+        # Parse and save facts
+        facts = extract_facts_from_response(result.content)
+        
+        if facts:
+            memory_manager = MemoryManager(user_id)
+            memory_manager.save_facts_batch(facts, source="conversation")
+    except Exception:
+        # Don't fail the main flow if extraction fails
+        pass
+    
+    return {}
 
 
 async def generate_response_stream(state: ChatState) -> AsyncIterator[str]:
@@ -109,11 +157,13 @@ def create_chat_graph() -> StateGraph:
     # Add nodes
     builder.add_node("load_memory", load_memory)
     builder.add_node("generate_response", generate_response)
+    builder.add_node("extract_memories", extract_memories)
     
-    # Add edges
+    # Add edges: load -> generate -> extract -> end
     builder.add_edge(START, "load_memory")
     builder.add_edge("load_memory", "generate_response")
-    builder.add_edge("generate_response", END)
+    builder.add_edge("generate_response", "extract_memories")
+    builder.add_edge("extract_memories", END)
     
     # Compile with checkpointer for persistence
     checkpointer = get_checkpointer()
@@ -154,6 +204,8 @@ def invoke_chat(
             "user_id": user_id,
             "model_name": model_name or DEFAULT_MODEL,
             "memory_context": "",
+            "last_user_message": "",
+            "last_assistant_response": "",
         },
         config=config,
     )
@@ -187,7 +239,7 @@ async def stream_chat(
     
     # First, load memories
     memory_manager = MemoryManager(user_id)
-    memory_context = memory_manager.get_context_memories(query=message, limit=5)
+    memory_context = memory_manager.get_context_memories(query=message, limit=10)
     
     # Create state
     state = ChatState(
@@ -195,6 +247,8 @@ async def stream_chat(
         user_id=user_id,
         model_name=model_name or DEFAULT_MODEL,
         memory_context=memory_context,
+        last_user_message=message,
+        last_assistant_response="",
     )
     
     # Stream the response
@@ -203,7 +257,7 @@ async def stream_chat(
         full_response += chunk
         yield chunk
     
-    # After streaming, save to graph for persistence
+    # After streaming, save to graph for persistence and extract memories
     graph = create_chat_graph()
     config = {"configurable": {"thread_id": conversation_id}}
     
@@ -217,6 +271,8 @@ async def stream_chat(
             "user_id": user_id,
             "model_name": model_name or DEFAULT_MODEL,
             "memory_context": memory_context,
+            "last_user_message": message,
+            "last_assistant_response": full_response,
         },
         config=config,
     )

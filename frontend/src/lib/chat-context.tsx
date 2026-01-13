@@ -1,11 +1,13 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react';
+import { useUser } from '@clerk/nextjs';
 import {
     Message,
     ModelInfo,
     ConversationSummary,
     sendMessage,
+    streamMessage,
     getModels,
     getConversations,
     getConversation,
@@ -32,6 +34,7 @@ interface ChatContextType {
 
     // User
     userId: string;
+    isAuthenticated: boolean;
 
     // Actions
     sendChatMessage: (content: string) => Promise<void>;
@@ -53,6 +56,9 @@ interface ChatProviderProps {
 }
 
 export function ChatProvider({ children }: ChatProviderProps) {
+    // Clerk authentication
+    const { user, isLoaded, isSignedIn } = useUser();
+
     // State
     const [messages, setMessages] = useState<Message[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -62,8 +68,12 @@ export function ChatProvider({ children }: ChatProviderProps) {
     const [selectedModel, setSelectedModel] = useState('llama-3.3-70b-versatile');
     const [models, setModels] = useState<ModelInfo[]>([]);
 
-    // For now, use a simple user ID. In production, this would come from auth.
-    const userId = 'default-user';
+    // Track if we got a conversation ID from streaming
+    const pendingConversationId = useRef<string | null>(null);
+
+    // Get user ID from Clerk or use a default for non-authenticated users
+    const userId = user?.id || 'anonymous-user';
+    const isAuthenticated = isSignedIn ?? false;
 
     // Load models on mount
     useEffect(() => {
@@ -72,10 +82,12 @@ export function ChatProvider({ children }: ChatProviderProps) {
             .catch(console.error);
     }, []);
 
-    // Load conversations on mount
+    // Load conversations when user changes
     useEffect(() => {
-        refreshConversations();
-    }, []);
+        if (isLoaded) {
+            refreshConversations();
+        }
+    }, [isLoaded, userId]);
 
     const refreshConversations = useCallback(async () => {
         try {
@@ -100,32 +112,58 @@ export function ChatProvider({ children }: ChatProviderProps) {
         };
         setMessages(prev => [...prev, userMessage]);
 
+        // Add empty assistant message for streaming
+        const assistantMessage: Message = {
+            role: 'assistant',
+            content: '',
+            timestamp: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+
         try {
-            const response = await sendMessage({
+            let fullResponse = '';
+
+            // Use streaming API
+            for await (const chunk of streamMessage({
                 message: content,
                 user_id: userId,
                 conversation_id: conversationId || undefined,
                 model_name: selectedModel,
-            });
+            })) {
+                // Check if this is metadata object (from 'done' event)
+                if (typeof chunk === 'object' && chunk.conversation_id) {
+                    if (!conversationId) {
+                        pendingConversationId.current = chunk.conversation_id;
+                    }
+                } else if (typeof chunk === 'string') {
+                    // Regular content chunk
+                    fullResponse += chunk;
 
-            // Add assistant message
-            const assistantMessage: Message = {
-                role: 'assistant',
-                content: response.response,
-                timestamp: new Date().toISOString(),
-            };
-            setMessages(prev => [...prev, assistantMessage]);
+                    // Update the last message with accumulated content
+                    setMessages(prev => {
+                        const updated = [...prev];
+                        if (updated.length > 0) {
+                            updated[updated.length - 1] = {
+                                ...updated[updated.length - 1],
+                                content: fullResponse,
+                            };
+                        }
+                        return updated;
+                    });
+                }
+            }
 
-            // Update conversation ID if this was a new conversation
-            if (!conversationId) {
-                setConversationId(response.conversation_id);
-                // Refresh conversations list
-                refreshConversations();
+            // Set conversation ID after streaming completes
+            if (pendingConversationId.current && !conversationId) {
+                setConversationId(pendingConversationId.current);
+                pendingConversationId.current = null;
+                // Refresh conversations list after new conversation created
+                await refreshConversations();
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to send message');
-            // Remove the user message on error
-            setMessages(prev => prev.slice(0, -1));
+            // Remove the last two messages on error (user + empty assistant)
+            setMessages(prev => prev.slice(0, -2));
         } finally {
             setIsLoading(false);
         }
@@ -173,6 +211,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
         selectedModel,
         models,
         userId,
+        isAuthenticated,
         sendChatMessage,
         startNewChat,
         selectConversation,

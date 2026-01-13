@@ -76,10 +76,11 @@ export async function sendMessage(request: ChatRequest): Promise<ChatResponse> {
 
 /**
  * Send a chat message and stream the response
+ * Yields content chunks and a final metadata object with conversation_id
  */
 export async function* streamMessage(
     request: ChatRequest
-): AsyncGenerator<string, void, unknown> {
+): AsyncGenerator<string | { conversation_id: string; model_used: string }, void, unknown> {
     const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -95,6 +96,7 @@ export async function* streamMessage(
 
     const decoder = new TextDecoder();
     let buffer = '';
+    let currentEvent = 'message';
 
     while (true) {
         const { done, value } = await reader.read();
@@ -105,11 +107,22 @@ export async function* streamMessage(
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-            if (line.startsWith('data: ')) {
+            if (line.startsWith('event: ')) {
+                currentEvent = line.slice(7).trim();
+            } else if (line.startsWith('data: ')) {
                 const data = line.slice(6);
-                if (data && data !== '[DONE]') {
+                if (currentEvent === 'message' && data) {
                     yield data;
+                } else if (currentEvent === 'done' && data) {
+                    try {
+                        const meta = JSON.parse(data);
+                        yield meta;
+                    } catch {
+                        // Ignore parse errors for done event
+                    }
                 }
+                // Reset event type after processing data
+                currentEvent = 'message';
             }
         }
     }
@@ -192,3 +205,96 @@ export async function updateConversationTitle(
     }
     return response.json();
 }
+
+// ============================================================================
+// About You & Memory Types
+// ============================================================================
+
+export interface AboutYou {
+    nickname: string;
+    occupation: string;
+    about: string;
+    memory_enabled: boolean;
+}
+
+export interface MemoryItem {
+    key: string;
+    type: string;
+    content: string;
+    created_at: string;
+}
+
+// ============================================================================
+// About You & Memory Functions
+// ============================================================================
+
+/**
+ * Get user's About You settings
+ */
+export async function getAboutYou(userId: string): Promise<AboutYou> {
+    const response = await fetch(
+        `${API_BASE_URL}/api/users/${encodeURIComponent(userId)}/about`
+    );
+    if (!response.ok) {
+        throw new Error(`Failed to fetch about you: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
+ * Update user's About You settings
+ */
+export async function updateAboutYou(userId: string, about: AboutYou): Promise<AboutYou> {
+    const response = await fetch(
+        `${API_BASE_URL}/api/users/${encodeURIComponent(userId)}/about`,
+        {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(about),
+        }
+    );
+    if (!response.ok) {
+        throw new Error(`Failed to update about you: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
+ * Get user's memories
+ */
+export async function getMemories(userId: string): Promise<MemoryItem[]> {
+    const response = await fetch(
+        `${API_BASE_URL}/api/users/${encodeURIComponent(userId)}/memories`
+    );
+    if (!response.ok) {
+        throw new Error(`Failed to fetch memories: ${response.statusText}`);
+    }
+    return response.json();
+}
+
+/**
+ * Delete a specific memory
+ */
+export async function deleteMemory(userId: string, memoryKey: string): Promise<void> {
+    const response = await fetch(
+        `${API_BASE_URL}/api/users/${encodeURIComponent(userId)}/memories/${encodeURIComponent(memoryKey)}`,
+        { method: 'DELETE' }
+    );
+    if (!response.ok) {
+        throw new Error(`Failed to delete memory: ${response.statusText}`);
+    }
+}
+
+/**
+ * Clear all memories
+ */
+export async function clearMemories(userId: string): Promise<void> {
+    const response = await fetch(
+        `${API_BASE_URL}/api/users/${encodeURIComponent(userId)}/memories`,
+        { method: 'DELETE' }
+    );
+    if (!response.ok) {
+        throw new Error(`Failed to clear memories: ${response.statusText}`);
+    }
+}
+
