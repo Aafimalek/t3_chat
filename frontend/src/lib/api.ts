@@ -96,7 +96,10 @@ export async function* streamMessage(
 
     const decoder = new TextDecoder();
     let buffer = '';
+
+    // SSE State
     let currentEvent = 'message';
+    let dataBuffer: string[] = [];
 
     while (true) {
         const { done, value } = await reader.read();
@@ -104,25 +107,50 @@ export async function* streamMessage(
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
+        // Keep the last partial line in the buffer
         buffer = lines.pop() || '';
 
-        for (const line of lines) {
+        for (const rawLine of lines) {
+            // Remove carriage return if present (common in SSE over HTTP/Windows)
+            const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+
+            // Trim the line to check for emptiness (standard SSE allows \r)
+            const trimmedLine = line.trim();
+
+            if (trimmedLine === '') {
+                // Empty line triggers event dispatch
+                if (dataBuffer.length > 0) {
+                    const fullData = dataBuffer.join('\n');
+
+                    if (currentEvent === 'message') {
+                        yield fullData;
+                    } else if (currentEvent === 'done') {
+                        try {
+                            const meta = JSON.parse(fullData);
+                            yield meta;
+                        } catch {
+                            // Ignore parse errors
+                        }
+                    }
+
+                    // Reset buffers
+                    dataBuffer = [];
+                    currentEvent = 'message'; // Default event type
+                }
+                continue;
+            }
+
             if (line.startsWith('event: ')) {
                 currentEvent = line.slice(7).trim();
-            } else if (line.startsWith('data: ')) {
-                const data = line.slice(6);
-                if (currentEvent === 'message' && data) {
-                    yield data;
-                } else if (currentEvent === 'done' && data) {
-                    try {
-                        const meta = JSON.parse(data);
-                        yield meta;
-                    } catch {
-                        // Ignore parse errors for done event
-                    }
+            } else if (line.startsWith('data:')) {
+                // Strict SSE Spec implementation:
+                // 1. Remove "data:" prefix (5 chars)
+                let data = line.slice(5);
+                // 2. If first char is space, remove it (and only one)
+                if (data.startsWith(' ')) {
+                    data = data.slice(1);
                 }
-                // Reset event type after processing data
-                currentEvent = 'message';
+                dataBuffer.push(data);
             }
         }
     }

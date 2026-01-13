@@ -190,7 +190,9 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
                                                     {message.content}
                                                 </p>
                                             ) : (
-                                                <MarkdownRenderer content={message.content} />
+                                                <MarkdownRenderer
+                                                    content={message.content}
+                                                />
                                             )}
                                         </div>
                                     </div>

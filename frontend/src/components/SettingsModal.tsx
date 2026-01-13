@@ -113,8 +113,8 @@ export function SettingsModal({ isOpen, onClose, userId }: SettingsModalProps) {
                 <div className="flex border-b border-border">
                     <button
                         className={`px-6 py-3 text-sm font-medium transition-colors ${activeTab === 'about'
-                                ? 'text-pink-500 border-b-2 border-pink-500'
-                                : 'text-muted-foreground hover:text-foreground'
+                            ? 'text-pink-500 border-b-2 border-pink-500'
+                            : 'text-muted-foreground hover:text-foreground'
                             }`}
                         onClick={() => setActiveTab('about')}
                     >
@@ -122,8 +122,8 @@ export function SettingsModal({ isOpen, onClose, userId }: SettingsModalProps) {
                     </button>
                     <button
                         className={`px-6 py-3 text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'memory'
-                                ? 'text-pink-500 border-b-2 border-pink-500'
-                                : 'text-muted-foreground hover:text-foreground'
+                            ? 'text-pink-500 border-b-2 border-pink-500'
+                            : 'text-muted-foreground hover:text-foreground'
                             }`}
                         onClick={() => setActiveTab('memory')}
                     >
@@ -211,7 +211,7 @@ export function SettingsModal({ isOpen, onClose, userId }: SettingsModalProps) {
                                     </Button>
                                 )}
                             </div>
-                            <ScrollArea className="flex-1">
+                            <ScrollArea className="flex-1 h-[400px]">
                                 <div className="p-4 space-y-2">
                                     {memories.length === 0 ? (
                                         <p className="text-center text-muted-foreground py-8">
@@ -221,7 +221,7 @@ export function SettingsModal({ isOpen, onClose, userId }: SettingsModalProps) {
                                         memories.map((memory) => (
                                             <div
                                                 key={memory.key}
-                                                className="flex items-start gap-3 p-3 bg-muted/30 border border-border group"
+                                                className="flex items-start gap-3 p-3 bg-muted/30 border border-border group rounded-md"
                                             >
                                                 <div className="flex-1">
                                                     <p className="text-sm">{memory.content}</p>

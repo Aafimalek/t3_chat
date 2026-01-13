@@ -132,7 +132,10 @@ export function ChatProvider({ children }: ChatProviderProps) {
             })) {
                 // Check if this is metadata object (from 'done' event)
                 if (typeof chunk === 'object' && chunk.conversation_id) {
+                    // Update conversation ID immediately if not set
                     if (!conversationId) {
+                        setConversationId(chunk.conversation_id);
+                        // Also update pending ref just in case logic relies on it elsewhere
                         pendingConversationId.current = chunk.conversation_id;
                     }
                 } else if (typeof chunk === 'string') {
@@ -157,9 +160,10 @@ export function ChatProvider({ children }: ChatProviderProps) {
             if (pendingConversationId.current && !conversationId) {
                 setConversationId(pendingConversationId.current);
                 pendingConversationId.current = null;
-                // Refresh conversations list after new conversation created
-                await refreshConversations();
             }
+
+            // Always refresh conversations list to update message count in sidebar
+            await refreshConversations();
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to send message');
             // Remove the last two messages on error (user + empty assistant)
