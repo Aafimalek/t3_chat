@@ -80,19 +80,45 @@ class MemoryManager:
         return hashlib.md5(normalized.encode()).hexdigest()[:12]
     
     def _is_duplicate_fact(self, fact: str, existing_memories: list) -> bool:
-        """Check if a similar fact already exists."""
+        """
+        Check if a similar fact already exists.
+        
+        Uses multiple strategies:
+        1. Exact match (case-insensitive)
+        2. Substring containment (one is subset of another)
+        3. Token-based similarity (high word overlap)
+        """
+        # Normalize the input fact
         fact_lower = fact.lower().strip()
+        fact_tokens = set(fact_lower.split())
         
         for item in existing_memories:
             value = item.value if hasattr(item, 'value') else item.get('value', {})
+            
+            # Only compare with facts, not preferences
             if isinstance(value, dict) and value.get("type") in ("fact", "core_fact"):
                 existing_content = value.get("content", "").lower().strip()
-                # Check for exact match or high similarity
+                existing_tokens = set(existing_content.split())
+                
+                # Strategy 1: Exact match
                 if existing_content == fact_lower:
                     return True
-                # Check if one contains the other (update scenario)
+                
+                # Strategy 2: Substring containment
+                # If one contains the other, they're likely duplicates or updates
                 if fact_lower in existing_content or existing_content in fact_lower:
                     return True
+                
+                # Strategy 3: High token overlap
+                # If they share 80%+ of words, they're likely duplicates
+                if len(fact_tokens) > 2 and len(existing_tokens) > 2:
+                    overlap = len(fact_tokens & existing_tokens)
+                    smaller_set_size = min(len(fact_tokens), len(existing_tokens))
+                    similarity_ratio = overlap / smaller_set_size
+                    
+                    if similarity_ratio >= 0.8:
+                        return True
+        
         return False
     
     def save_fact(self, fact: str, source: str = "conversation") -> str | None:

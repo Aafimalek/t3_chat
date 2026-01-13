@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from models.schemas import Conversation, ConversationSummary, ConversationUpdate
 from database import get_database
+from memory.cleanup import cleanup_conversation_memory
 
 router = APIRouter(prefix="/api/conversations", tags=["Conversations"])
 
@@ -118,19 +119,42 @@ async def delete_conversation(
     conversation_id: str,
     user_id: str = Query(..., description="User identifier"),
 ) -> dict:
-    """Delete a conversation."""
+    """Delete a conversation and clean up associated short-term memory.
+    
+    This will delete:
+    - The conversation and its messages
+    - All checkpoints (graph state snapshots)
+    - All checkpoint writes (graph operations)
+    
+    Long-term memories are preserved and will be available in future conversations.
+    """
     db = await get_database()
     conversations = db["conversations"]
     
-    result = await conversations.delete_one({
+    # First, verify the conversation exists and belongs to the user
+    conversation = await conversations.find_one({
         "_id": conversation_id,
         "user_id": user_id,
     })
     
-    if result.deleted_count == 0:
+    if not conversation:
         raise HTTPException(
             status_code=404,
             detail="Conversation not found"
         )
     
-    return {"message": "Conversation deleted", "id": conversation_id}
+    # Clean up short-term memory (checkpoints and checkpoint_writes)
+    cleanup_stats = cleanup_conversation_memory(conversation_id)
+    
+    # Delete the conversation document
+    await conversations.delete_one({
+        "_id": conversation_id,
+        "user_id": user_id,
+    })
+    
+    return {
+        "message": "Conversation and short-term memory deleted",
+        "id": conversation_id,
+        "cleanup": cleanup_stats,
+        "note": "Long-term memories have been preserved for future conversations"
+    }

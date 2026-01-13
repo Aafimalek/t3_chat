@@ -16,6 +16,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { LoginPromptModal } from './LoginPromptModal';
 
 interface ChatAreaProps {
     isSidebarOpen: boolean;
@@ -29,6 +30,7 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
     const scrollViewportRef = useRef<HTMLDivElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+    const [showLoginModal, setShowLoginModal] = useState(false);
 
     const {
         messages,
@@ -37,7 +39,8 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
         sendChatMessage,
         selectedModel,
         setSelectedModel,
-        models
+        models,
+        isAuthenticated
     } = useChat();
 
     // Smart auto-scroll logic
@@ -81,6 +84,13 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
 
     const handleSend = async () => {
         if (!inputValue.trim() || isLoading) return;
+
+        // Check authentication before sending
+        if (!isAuthenticated) {
+            setShowLoginModal(true);
+            return;
+        }
+
         const message = inputValue;
         setInputValue('');
 
@@ -280,7 +290,8 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
                                 size="icon"
                                 className="h-8 w-8 bg-pink-600 hover:bg-pink-700 text-white shadow-md disabled:opacity-50"
                                 onClick={handleSend}
-                                disabled={isLoading || !inputValue.trim()}
+                                disabled={isLoading || !inputValue.trim() || !isAuthenticated}
+                                title={!isAuthenticated ? "Sign in to send messages" : "Send message"}
                             >
                                 {isLoading ? (
                                     <Loader2 size={16} className="animate-spin" />
@@ -291,7 +302,13 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
                         </div>
                     </div>
                 </div>
-            </div >
-        </div >
+            </div>
+
+            {/* Login Prompt Modal */}
+            <LoginPromptModal
+                isOpen={showLoginModal}
+                onClose={() => setShowLoginModal(false)}
+            />
+        </div>
     );
 }
