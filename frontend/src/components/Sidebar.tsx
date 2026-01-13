@@ -133,7 +133,7 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
                                         <div
                                             key={conv.id}
                                             className={cn(
-                                                "flex items-center justify-between h-auto py-3 px-3 w-full text-left font-normal cursor-pointer group transition-colors gap-2",
+                                                "grid grid-cols-[1fr_auto] items-center py-2 px-3 w-full text-left font-normal cursor-pointer group transition-colors gap-2 rounded-md",
                                                 conv.id === conversationId
                                                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
                                                     : "text-sidebar-foreground hover:bg-sidebar-accent/50",
@@ -141,17 +141,19 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
                                             )}
                                             onClick={() => selectConversation(conv.id)}
                                         >
-                                            <div className="flex flex-col gap-0.5 overflow-hidden flex-1 min-w-0">
+                                            <div className="flex flex-col gap-0.5 overflow-hidden min-w-0">
                                                 <span className="truncate text-sm font-medium">{conv.title}</span>
-                                                <span className="text-xs text-muted-foreground/60">
+                                                <span className="text-xs text-muted-foreground/60 truncate">
                                                     {conv.message_count} messages
                                                 </span>
                                             </div>
                                             <button
-                                                className="h-6 w-6 shrink-0 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive transition-opacity border rounded-md"
+                                                className="h-8 w-8 flex items-center justify-center rounded-md bg-destructive/5 hover:bg-destructive/15 hover:text-destructive transition-all border border-destructive/20 hover:border-destructive/40 text-destructive/70"
                                                 onClick={(e) => handleDeleteConversation(e, conv.id)}
+                                                title="Delete conversation"
+                                                aria-label="Delete conversation"
                                             >
-                                                <Trash2 size={14} />
+                                                <Trash2 size={16} />
                                             </button>
                                         </div>
                                     ))}
