@@ -31,62 +31,56 @@ class Settings(BaseSettings):
 # Available Groq Models
 AVAILABLE_MODELS = [
     {
-        "id": "llama-3.3-70b-versatile",
-        "name": "Llama 3.3 70B Versatile",
-        "description": "Meta's most capable open model, great for complex tasks",
+        "id": "qwen/qwen3-32b",
+        "name": "Qwen 3 32B",
+        "description": "Qwen 3 32B Model",
+        "context_length": 32768,
+    },
+    {
+        "id": "groq/compound",
+        "name": "Groq Compound",
+        "description": "Groq Compound Model",
+        "context_length": 8192,
+    },
+    {
+        "id": "meta-llama/llama-4-maverick-17b-128e-instruct",
+        "name": "Llama 4 Maverick",
+        "description": "Llama 4 Maverick 17B",
         "context_length": 128000,
     },
     {
-        "id": "llama-3.1-70b-versatile",
-        "name": "Llama 3.1 70B Versatile",
-        "description": "Powerful model for diverse applications",
+        "id": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "name": "Llama 4 Scout",
+        "description": "Llama 4 Scout 17B",
+        "context_length": 128000,
+    },
+    {
+        "id": "moonshotai/kimi-k2-instruct-0905",
+        "name": "Kimi K2",
+        "description": "Moonshot AI Kimi K2",
+        "context_length": 128000,
+    },
+    {
+        "id": "openai/gpt-oss-120b",
+        "name": "GPT OSS 120B",
+        "description": "OpenAI GPT OSS 120B",
         "context_length": 128000,
     },
     {
         "id": "llama-3.1-8b-instant",
         "name": "Llama 3.1 8B Instant",
-        "description": "Fast and efficient for quick responses",
+        "description": "Fast and efficient Llama 3.1 8B model",
         "context_length": 128000,
     },
     {
-        "id": "llama3-70b-8192",
-        "name": "Llama 3 70B",
-        "description": "High-quality responses with 8K context",
-        "context_length": 8192,
-    },
-    {
-        "id": "llama3-8b-8192",
-        "name": "Llama 3 8B",
-        "description": "Efficient model for everyday tasks",
-        "context_length": 8192,
-    },
-    {
-        "id": "mixtral-8x7b-32768",
-        "name": "Mixtral 8x7B",
-        "description": "Mixture of experts model with 32K context",
-        "context_length": 32768,
-    },
-    {
-        "id": "gemma2-9b-it",
-        "name": "Gemma 2 9B",
-        "description": "Google's efficient instruction-tuned model",
-        "context_length": 8192,
-    },
-    {
-        "id": "qwen-qwq-32b",
-        "name": "Qwen QWQ 32B",
-        "description": "Advanced reasoning model from Alibaba",
-        "context_length": 32768,
-    },
-    {
-        "id": "deepseek-r1-distill-llama-70b",
-        "name": "DeepSeek R1 Distill 70B",
-        "description": "Reasoning-focused distilled model",
-        "context_length": 8192,
+        "id": "llama-3.3-70b-versatile",
+        "name": "Llama 3.3 70B Versatile",
+        "description": "Versatile Llama 3.3 70B model",
+        "context_length": 128000,
     },
 ]
 
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct"
 
 
 @lru_cache
