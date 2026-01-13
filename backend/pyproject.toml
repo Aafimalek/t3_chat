@@ -17,4 +17,5 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "sqlalchemy>=2.0.45",
     "uvicorn>=0.40.0",
+    "motor>=3.6.0",
 ]
