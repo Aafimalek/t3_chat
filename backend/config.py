@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     # Groq API
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
     
-    # MongoDB
-    mongodb_url: str = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+    # MongoDB (Atlas)
+    mongodb_url: str = os.getenv("MONGODB_URL")
     database_name: str = os.getenv("DATABASE_NAME", "t3_chat")
     
     # LangSmith (optional)
