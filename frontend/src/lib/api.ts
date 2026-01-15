@@ -19,6 +19,8 @@ export interface ChatRequest {
     user_id: string;
     conversation_id?: string;
     model_name?: string;
+    tool_mode?: 'auto' | 'search' | 'none';
+    use_rag?: boolean;
 }
 
 export interface ChatResponse {
@@ -326,3 +328,122 @@ export async function clearMemories(userId: string): Promise<void> {
     }
 }
 
+// ============================================================================
+// RAG Document Types
+// ============================================================================
+
+export interface RagDocument {
+    document_id: string;
+    filename: string;
+    chunk_count: number;
+    text_length: number;
+    created_at: string;
+}
+
+export interface RagUploadResponse {
+    document_id: string;
+    conversation_id: string;
+    filename: string;
+    chunk_count: number;
+    text_length: number;
+    message: string;
+}
+
+export interface RagDocumentListResponse {
+    documents: RagDocument[];
+    conversation_id: string;
+    total: number;
+}
+
+export interface ToolMetadata {
+    search_used?: boolean;
+    rag_used?: boolean;
+    search_query?: string;
+    rag_chunks?: number;
+}
+
+// ============================================================================
+// RAG API Functions
+// ============================================================================
+
+/**
+ * Upload a PDF document for RAG
+ */
+export async function uploadRagDocument(
+    file: File,
+    userId: string,
+    conversationId?: string
+): Promise<RagUploadResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('user_id', userId);
+    if (conversationId) {
+        formData.append('conversation_id', conversationId);
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/rag/upload`, {
+        method: 'POST',
+        body: formData,
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Upload failed: ${response.statusText}`);
+    }
+
+    return response.json();
+}
+
+/**
+ * List RAG documents for a conversation
+ */
+export async function listRagDocuments(
+    userId: string,
+    conversationId: string
+): Promise<RagDocumentListResponse> {
+    const response = await fetch(
+        `${API_BASE_URL}/api/rag/documents?user_id=${encodeURIComponent(userId)}&conversation_id=${encodeURIComponent(conversationId)}`
+    );
+
+    if (!response.ok) {
+        throw new Error(`Failed to list documents: ${response.statusText}`);
+    }
+
+    return response.json();
+}
+
+/**
+ * Delete a RAG document
+ */
+export async function deleteRagDocument(
+    documentId: string,
+    userId: string
+): Promise<void> {
+    const response = await fetch(
+        `${API_BASE_URL}/api/rag/documents/${encodeURIComponent(documentId)}?user_id=${encodeURIComponent(userId)}`,
+        { method: 'DELETE' }
+    );
+
+    if (!response.ok) {
+        throw new Error(`Failed to delete document: ${response.statusText}`);
+    }
+}
+
+/**
+ * Get document count for a conversation
+ */
+export async function getRagDocumentCount(
+    conversationId: string,
+    userId: string
+): Promise<number> {
+    const response = await fetch(
+        `${API_BASE_URL}/api/rag/documents/${encodeURIComponent(conversationId)}/count?user_id=${encodeURIComponent(userId)}`
+    );
+
+    if (!response.ok) {
+        return 0;
+    }
+
+    const data = await response.json();
+    return data.count || 0;
+}

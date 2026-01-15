@@ -30,11 +30,13 @@ async def chat(request: ChatRequest) -> ChatResponse:
     
     try:
         # Invoke the chat graph
-        response, messages = invoke_chat(
+        response, messages, tool_metadata = invoke_chat(
             message=request.message,
             user_id=request.user_id,
             conversation_id=conversation_id,
             model_name=model_name,
+            tool_mode=request.tool_mode,
+            use_rag=request.use_rag,
         )
         
         # Save to conversations collection
@@ -45,6 +47,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             assistant_response=response,
             model_name=model_name,
             is_new=request.conversation_id is None,
+            tool_metadata=tool_metadata,
         )
         
         return ChatResponse(
@@ -70,6 +73,7 @@ async def chat_stream(request: ChatRequest):
     async def event_generator():
         """Generate SSE events from the stream."""
         full_response = ""
+        tool_metadata = {}
         
         try:
             async for chunk in stream_chat(
@@ -77,7 +81,14 @@ async def chat_stream(request: ChatRequest):
                 user_id=request.user_id,
                 conversation_id=conversation_id,
                 model_name=model_name,
+                tool_mode=request.tool_mode,
+                use_rag=request.use_rag,
             ):
+                # Check if this is tool metadata
+                if isinstance(chunk, dict) and "tool_metadata" in chunk:
+                    tool_metadata = chunk["tool_metadata"]
+                    continue
+                
                 full_response += chunk
                 yield {
                     "event": "message",
@@ -90,6 +101,7 @@ async def chat_stream(request: ChatRequest):
                 "data": {
                     "conversation_id": conversation_id,
                     "model_used": model_name,
+                    "tool_metadata": tool_metadata,
                 },
             }
             
@@ -101,6 +113,7 @@ async def chat_stream(request: ChatRequest):
                 assistant_response=full_response,
                 model_name=model_name,
                 is_new=request.conversation_id is None,
+                tool_metadata=tool_metadata,
             )
             
         except Exception as e:
@@ -119,6 +132,7 @@ async def _save_conversation(
     assistant_response: str,
     model_name: str,
     is_new: bool,
+    tool_metadata: dict | None = None,
 ) -> None:
     """Save or update conversation in MongoDB."""
     db = await get_database()
@@ -136,6 +150,7 @@ async def _save_conversation(
         "role": "assistant",
         "content": assistant_response,
         "timestamp": now,
+        "tool_metadata": tool_metadata or {},
     }
     
     if is_new:
@@ -151,16 +166,30 @@ async def _save_conversation(
             "updated_at": now,
         })
     else:
-        # Update existing conversation
-        await conversations.update_one(
-            {"_id": conversation_id},
-            {
-                "$push": {
-                    "messages": {"$each": [user_msg, assistant_msg]}
-                },
-                "$set": {"updated_at": now},
-            }
-        )
+        # Check if conversation exists, create if not (for RAG upload before first message)
+        existing = await conversations.find_one({"_id": conversation_id})
+        if not existing:
+            title = _generate_title(user_message)
+            await conversations.insert_one({
+                "_id": conversation_id,
+                "user_id": user_id,
+                "title": title,
+                "model_name": model_name,
+                "messages": [user_msg, assistant_msg],
+                "created_at": now,
+                "updated_at": now,
+            })
+        else:
+            # Update existing conversation
+            await conversations.update_one(
+                {"_id": conversation_id},
+                {
+                    "$push": {
+                        "messages": {"$each": [user_msg, assistant_msg]}
+                    },
+                    "$set": {"updated_at": now},
+                }
+            )
 
 
 def _generate_title(message: str, max_length: int = 50) -> str:

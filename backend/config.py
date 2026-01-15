@@ -23,6 +23,18 @@ class Settings(BaseSettings):
     langsmith_tracing: str = "true"
     langsmith_endpoint: str = "https://api.smith.langchain.com"
     
+    # Tavily Search API
+    tavily_api_key: str = ""
+    
+    # Ollama Embeddings
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_embed_model: str = "nomic-embed-text"
+    
+    # RAG Configuration
+    rag_chunk_size: int = 1000
+    rag_chunk_overlap: int = 200
+    rag_top_k: int = 5
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

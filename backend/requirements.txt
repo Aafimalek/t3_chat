@@ -5,12 +5,14 @@ fastapi
 uvicorn[standard]
 pydantic
 pydantic-settings
+python-multipart
 
 # LangChain & LangGraph
 langchain
 langchain-core
 langchain-groq
 langchain-community
+langchain-ollama
 langgraph
 
 # MongoDB
@@ -18,6 +20,13 @@ pymongo
 motor
 langgraph-checkpoint-mongodb
 langgraph-store-mongodb
+
+# PDF Processing & RAG
+pdfplumber
+numpy
+
+# Search
+tavily-python
 
 # Utilities
 python-dotenv

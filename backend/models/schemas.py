@@ -39,6 +39,14 @@ class ChatRequest(BaseModel):
         description="Optional model to use for this request"
     )
     user_id: str = Field(description="User identifier")
+    tool_mode: Literal["auto", "search", "none"] = Field(
+        default="auto",
+        description="Tool mode: 'auto' for heuristic detection, 'search' to force search, 'none' to disable"
+    )
+    use_rag: bool = Field(
+        default=True,
+        description="Whether to use RAG if documents are available"
+    )
 
 
 class ChatResponse(BaseModel):

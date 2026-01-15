@@ -28,9 +28,11 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const scrollViewportRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
     const [showLoginModal, setShowLoginModal] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
 
     const {
         messages,
@@ -40,7 +42,13 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
         selectedModel,
         setSelectedModel,
         models,
-        isAuthenticated
+        isAuthenticated,
+        searchEnabled,
+        setSearchEnabled,
+        documentCount,
+        uploadDocument,
+        lastToolMetadata,
+        conversationId,
     } = useChat();
 
     // Smart auto-scroll logic
@@ -109,6 +117,44 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
         }
     };
 
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Check authentication
+        if (!isAuthenticated) {
+            setShowLoginModal(true);
+            return;
+        }
+
+        // Validate file type
+        if (!file.name.toLowerCase().endsWith('.pdf')) {
+            alert('Only PDF files are supported');
+            return;
+        }
+
+        setIsUploading(true);
+        try {
+            await uploadDocument(file);
+        } catch (err) {
+            console.error('Upload failed:', err);
+        } finally {
+            setIsUploading(false);
+            // Reset input
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        }
+    };
+
+    const handleSearchToggle = () => {
+        if (!isAuthenticated) {
+            setShowLoginModal(true);
+            return;
+        }
+        setSearchEnabled(!searchEnabled);
+    };
+
     const selectedModelInfo = models.find(m => m.id === selectedModel);
 
     // Empty state when no messages
@@ -169,34 +215,52 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
                             onScroll={handleScroll}
                         >
                             <div className="flex flex-col gap-6 py-8 pt-16 px-4">
-                                {messages.map((message, index) => (
-                                    <div
-                                        key={index}
-                                        className={cn(
-                                            "flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300",
-                                            message.role === 'user' ? 'justify-end' : 'justify-start'
-                                        )}
-                                    >
-                                        <div
-                                            className={cn(
-                                                "max-w-[85%] px-4 py-3",
-                                                message.role === 'user'
-                                                    ? 'bg-pink-600 text-white'
-                                                    : 'bg-muted/50 text-foreground border border-border/50'
-                                            )}
-                                        >
-                                            {message.role === 'user' ? (
-                                                <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                                                    {message.content}
-                                                </p>
-                                            ) : (
-                                                <MarkdownRenderer
-                                                    content={message.content}
-                                                />
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
+{messages.map((message, index) => (
+                                                    <div key={index}>
+                                                        {/* Show tool indicator for assistant messages */}
+                                                        {message.role === 'assistant' && index === messages.length - 1 && lastToolMetadata && (lastToolMetadata.search_used || lastToolMetadata.rag_used) && (
+                                                            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2 animate-in fade-in duration-300">
+                                                                {lastToolMetadata.search_used && (
+                                                                    <span className="flex items-center gap-1 bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded">
+                                                                        <Search size={12} />
+                                                                        Web search used
+                                                                    </span>
+                                                                )}
+                                                                {lastToolMetadata.rag_used && (
+                                                                    <span className="flex items-center gap-1 bg-green-500/10 text-green-500 px-2 py-0.5 rounded">
+                                                                        <Paperclip size={12} />
+                                                                        {lastToolMetadata.rag_chunks} doc chunk(s) used
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        <div
+                                                            className={cn(
+                                                                "flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300",
+                                                                message.role === 'user' ? 'justify-end' : 'justify-start'
+                                                            )}
+                                                        >
+                                                            <div
+                                                                className={cn(
+                                                                    "max-w-[85%] px-4 py-3",
+                                                                    message.role === 'user'
+                                                                        ? 'bg-pink-600 text-white'
+                                                                        : 'bg-muted/50 text-foreground border border-border/50'
+                                                                )}
+                                                            >
+                                                                {message.role === 'user' ? (
+                                                                    <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                                                                        {message.content}
+                                                                    </p>
+                                                                ) : (
+                                                                    <MarkdownRenderer
+                                                                        content={message.content}
+                                                                    />
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
 
                                 {isLoading && (
                                     <div className="flex gap-4 animate-in fade-in duration-300">
@@ -281,12 +345,56 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
                                     </DropdownMenuContent>
                                 </DropdownMenu>
 
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-background/80">
+                                {/* Search Toggle */}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className={cn(
+                                        "h-8 w-8 transition-colors",
+                                        searchEnabled
+                                            ? "bg-blue-500/20 text-blue-500 hover:bg-blue-500/30"
+                                            : "text-muted-foreground hover:bg-background/80"
+                                    )}
+                                    onClick={handleSearchToggle}
+                                    title={searchEnabled ? "Search enabled (click to disable)" : "Enable web search"}
+                                >
                                     <Search size={16} />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-background/80">
-                                    <Paperclip size={16} />
-                                </Button>
+
+                                {/* File Upload */}
+                                <div className="relative">
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        onChange={handleFileUpload}
+                                        accept=".pdf"
+                                        className="hidden"
+                                    />
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className={cn(
+                                            "h-8 w-8 transition-colors",
+                                            documentCount > 0
+                                                ? "text-green-500 hover:bg-green-500/20"
+                                                : "text-muted-foreground hover:bg-background/80"
+                                        )}
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={isUploading}
+                                        title={documentCount > 0 ? `${documentCount} document(s) uploaded` : "Upload PDF"}
+                                    >
+                                        {isUploading ? (
+                                            <Loader2 size={16} className="animate-spin" />
+                                        ) : (
+                                            <Paperclip size={16} />
+                                        )}
+                                    </Button>
+                                    {documentCount > 0 && (
+                                        <span className="absolute -top-1 -right-1 h-4 w-4 text-[10px] font-bold bg-green-500 text-white rounded-full flex items-center justify-center">
+                                            {documentCount}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                             <Button
                                 size="icon"

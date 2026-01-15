@@ -27,6 +27,11 @@ class ChatState(TypedDict):
     memory_context: str
     last_user_message: str
     last_assistant_response: str
+    tool_context: str
+    tool_mode: str
+    use_rag: bool
+    conversation_id: str
+    tool_metadata: dict
 
 
 # ============================================================================
@@ -58,15 +63,53 @@ def load_memory(state: ChatState) -> dict:
     }
 
 
+def load_tool_context(state: ChatState) -> dict:
+    """Load tool context (search and/or RAG) for the query."""
+    from agent.tools import get_tool_context
+    
+    last_user_msg = state.get("last_user_message", "")
+    conversation_id = state.get("conversation_id", "")
+    tool_mode = state.get("tool_mode", "auto")
+    use_rag = state.get("use_rag", True)
+    
+    if not last_user_msg:
+        return {"tool_context": "", "tool_metadata": {}}
+    
+    tool_context, tool_metadata = get_tool_context(
+        query=last_user_msg,
+        conversation_id=conversation_id,
+        tool_mode=tool_mode,
+        use_rag=use_rag,
+    )
+    
+    return {
+        "tool_context": tool_context,
+        "tool_metadata": tool_metadata,
+    }
+
+
 def generate_response(state: ChatState) -> dict:
     """Generate a response using the LLM."""
     model_name = state["model_name"]
     memory_context = state.get("memory_context", "")
+    tool_context = state.get("tool_context", "")
+    tool_metadata = state.get("tool_metadata", {})
     
-    # Build system message with memory context
+    # Build system message with memory and tool context
     system_content = SYSTEM_PROMPT.format(
         memory_context=memory_context if memory_context else ""
     )
+    
+    # Add tool context if available
+    if tool_context:
+        tool_instructions = """
+
+IMPORTANT: You have been provided with tool results (search and/or document retrieval).
+- Use the information provided to give a specific, grounded answer
+- Cite sources when using search results
+- If the tool results don't contain relevant information, acknowledge this and provide the best answer you can
+- Do NOT give generic responses - always reference the specific data provided"""
+        system_content += tool_instructions + tool_context
     
     # Get the LLM
     llm = get_llm(model_name=model_name, streaming=False)
@@ -127,11 +170,23 @@ async def generate_response_stream(state: ChatState) -> AsyncIterator[str]:
     """Generate a streaming response using the LLM."""
     model_name = state["model_name"]
     memory_context = state.get("memory_context", "")
+    tool_context = state.get("tool_context", "")
     
-    # Build system message with memory context
+    # Build system message with memory and tool context
     system_content = SYSTEM_PROMPT.format(
         memory_context=memory_context if memory_context else ""
     )
+    
+    # Add tool context if available
+    if tool_context:
+        tool_instructions = """
+
+IMPORTANT: You have been provided with tool results (search and/or document retrieval).
+- Use the information provided to give a specific, grounded answer
+- Cite sources when using search results
+- If the tool results don't contain relevant information, acknowledge this and provide the best answer you can
+- Do NOT give generic responses - always reference the specific data provided"""
+        system_content += tool_instructions + tool_context
     
     # Get the LLM with streaming enabled
     llm = get_llm(model_name=model_name, streaming=True)
@@ -156,12 +211,14 @@ def create_chat_graph() -> StateGraph:
     
     # Add nodes
     builder.add_node("load_memory", load_memory)
+    builder.add_node("load_tool_context", load_tool_context)
     builder.add_node("generate_response", generate_response)
     builder.add_node("extract_memories", extract_memories)
     
-    # Add edges: load -> generate -> extract -> end
+    # Add edges: load_memory -> load_tools -> generate -> extract -> end
     builder.add_edge(START, "load_memory")
-    builder.add_edge("load_memory", "generate_response")
+    builder.add_edge("load_memory", "load_tool_context")
+    builder.add_edge("load_tool_context", "generate_response")
     builder.add_edge("generate_response", "extract_memories")
     builder.add_edge("extract_memories", END)
     
@@ -179,7 +236,9 @@ def invoke_chat(
     user_id: str,
     conversation_id: str,
     model_name: str | None = None,
-) -> tuple[str, list]:
+    tool_mode: str = "auto",
+    use_rag: bool = True,
+) -> tuple[str, list, dict]:
     """
     Invoke the chat graph with a message.
     
@@ -188,9 +247,11 @@ def invoke_chat(
         user_id: User identifier
         conversation_id: Thread ID for conversation persistence
         model_name: Optional model to use
+        tool_mode: Tool mode setting (auto/search/none)
+        use_rag: Whether to use RAG
         
     Returns:
-        Tuple of (response_text, all_messages)
+        Tuple of (response_text, all_messages, tool_metadata)
     """
     from config import DEFAULT_MODEL
     
@@ -206,6 +267,11 @@ def invoke_chat(
             "memory_context": "",
             "last_user_message": "",
             "last_assistant_response": "",
+            "tool_context": "",
+            "tool_mode": tool_mode,
+            "use_rag": use_rag,
+            "conversation_id": conversation_id,
+            "tool_metadata": {},
         },
         config=config,
     )
@@ -213,8 +279,9 @@ def invoke_chat(
     # Extract the response
     messages = result["messages"]
     response = messages[-1].content if messages else ""
+    tool_metadata = result.get("tool_metadata", {})
     
-    return response, messages
+    return response, messages, tool_metadata
 
 
 async def stream_chat(
@@ -222,7 +289,9 @@ async def stream_chat(
     user_id: str,
     conversation_id: str,
     model_name: str | None = None,
-) -> AsyncIterator[str]:
+    tool_mode: str = "auto",
+    use_rag: bool = True,
+) -> AsyncIterator[str | dict]:
     """
     Stream a chat response.
     
@@ -231,15 +300,26 @@ async def stream_chat(
         user_id: User identifier
         conversation_id: Thread ID for conversation persistence
         model_name: Optional model to use
+        tool_mode: Tool mode setting (auto/search/none)
+        use_rag: Whether to use RAG
         
     Yields:
-        Response chunks as they're generated
+        Response chunks as they're generated, then tool metadata dict
     """
     from config import DEFAULT_MODEL
+    from agent.tools import get_tool_context
     
     # First, load memories
     memory_manager = MemoryManager(user_id)
     memory_context = memory_manager.get_context_memories(query=message, limit=10)
+    
+    # Load tool context (search and/or RAG)
+    tool_context, tool_metadata = get_tool_context(
+        query=message,
+        conversation_id=conversation_id,
+        tool_mode=tool_mode,
+        use_rag=use_rag,
+    )
     
     # Create state
     state = ChatState(
@@ -249,6 +329,11 @@ async def stream_chat(
         memory_context=memory_context,
         last_user_message=message,
         last_assistant_response="",
+        tool_context=tool_context,
+        tool_mode=tool_mode,
+        use_rag=use_rag,
+        conversation_id=conversation_id,
+        tool_metadata=tool_metadata,
     )
     
     # Stream the response
@@ -256,6 +341,9 @@ async def stream_chat(
     async for chunk in generate_response_stream(state):
         full_response += chunk
         yield chunk
+    
+    # Yield tool metadata at the end
+    yield {"tool_metadata": tool_metadata}
     
     # After streaming, save to graph for persistence and extract memories
     graph = create_chat_graph()
@@ -273,6 +361,11 @@ async def stream_chat(
             "memory_context": memory_context,
             "last_user_message": message,
             "last_assistant_response": full_response,
+            "tool_context": tool_context,
+            "tool_mode": tool_mode,
+            "use_rag": use_rag,
+            "conversation_id": conversation_id,
+            "tool_metadata": tool_metadata,
         },
         config=config,
     )
