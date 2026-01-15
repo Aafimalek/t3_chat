@@ -5,11 +5,18 @@
   <img src="https://img.shields.io/badge/React-19.2.3-61DAFB?style=for-the-badge&logo=react" alt="React"/>
   <img src="https://img.shields.io/badge/FastAPI-Latest-009688?style=for-the-badge&logo=fastapi" alt="FastAPI"/>
   <img src="https://img.shields.io/badge/LangGraph-Latest-blue?style=for-the-badge" alt="LangGraph"/>
-  <img src="https://img.shields.io/badge/MongoDB-Local-47A248?style=for-the-badge&logo=mongodb" alt="MongoDB"/>
+  <img src="https://img.shields.io/badge/MongoDB-Atlas-47A248?style=for-the-badge&logo=mongodb" alt="MongoDB"/>
   <img src="https://img.shields.io/badge/Groq-LPU-orange?style=for-the-badge" alt="Groq"/>
+  <img src="https://img.shields.io/badge/Tavily-Search-purple?style=for-the-badge" alt="Tavily"/>
+  <img src="https://img.shields.io/badge/Ollama-Embeddings-green?style=for-the-badge" alt="Ollama"/>
 </p>
 
-A full-stack AI chat application inspired by [T3.chat](https://t3.chat). Built with **Next.js 16** (App Router) and **FastAPI**, featuring a persistent memory system that learns about users over time, multi-model support via Groq's ultra-fast LPU inference, and real-time streaming responses.
+A full-stack AI chat application inspired by [T3.chat](https://t3.chat). Built with **Next.js 16** (App Router) and **FastAPI**, featuring:
+- **Web Search** via Tavily API for real-time information
+- **RAG (Retrieval-Augmented Generation)** for PDF document Q&A
+- **Persistent Memory System** that learns about users over time
+- **Multi-model Support** via Groq's ultra-fast LPU inference
+- **Real-time Streaming** responses via SSE
 
 ---
 
@@ -18,12 +25,14 @@ A full-stack AI chat application inspired by [T3.chat](https://t3.chat). Built w
 - [Key Features](#-key-features)
 - [Architecture Overview](#-architecture-overview)
 - [System Design Deep Dive](#-system-design-deep-dive)
+- [Tool System (Search & RAG)](#-tool-system-search--rag)
 - [Technology Stack](#-technology-stack)
 - [Project Structure](#-project-structure)
 - [Component Hierarchy](#-component-hierarchy)
 - [Data Flow](#-data-flow)
 - [API Reference](#-api-reference)
 - [Memory System](#-memory-system)
+- [MongoDB Collections](#-mongodb-collections)
 - [Setup & Installation](#-setup--installation)
 - [Environment Variables](#-environment-variables)
 - [Development](#-development)
@@ -34,81 +43,122 @@ A full-stack AI chat application inspired by [T3.chat](https://t3.chat). Built w
 
 ## 🚀 Key Features
 
+### 🔍 Web Search Tool (Tavily)
+
+Real-time web search integration for current information queries.
+
+| Feature | Description |
+|---------|-------------|
+| **Tavily API** | Uses httpx to call Tavily's advanced search with answer generation |
+| **Smart Auto-Detection** | Automatically detects queries needing search (dates, news, prices, events) |
+| **Manual Toggle** | Users can force search via the search button in the input area |
+| **Article Reader** | Fetches full content from top URLs for detailed extraction |
+| **Source Citations** | Responses include URLs and source attribution |
+| **Confidence Scoring** | Sources rated HIGH/MEDIUM/LOW based on domain reputation |
+
+### 📄 RAG Tool (PDF Q&A)
+
+Upload PDFs and ask questions about their content within a specific chat.
+
+| Feature | Description |
+|---------|-------------|
+| **PDF Upload** | Drag-and-drop or click to upload PDF files |
+| **Text Extraction** | Uses `pdfplumber` for accurate text extraction |
+| **Chunking** | Custom text splitting with sentence boundary detection (1000 chars, 200 overlap) |
+| **Embeddings** | Ollama's `nomic-embed-text` model for vectorization |
+| **Vector Storage** | MongoDB stores embeddings alongside chunks |
+| **Similarity Search** | Cosine similarity for relevant chunk retrieval |
+| **Per-Chat Scope** | Documents are scoped to individual conversations |
+
 ### 🧠 Adaptive Memory System
+
 Unlike standard chatbots that forget you after a session, this application maintains a **long-term memory** of user facts and preferences.
 
 | Feature | Description |
 |---------|-------------|
-| **Automatic Fact Extraction** | A lightweight LLM (`llama-3.1-8b-instant`) runs in the background after each conversation to extract personal facts the user shares |
-| **Smart Deduplication** | Three-tier strategy prevents duplicate memories: exact matching (case-insensitive), substring containment, and token overlap analysis (≥80% similarity) |
-| **Context Injection** | Relevant memories are automatically injected into the system prompt with "Things I remember about you:" prefix |
-| **Manual Memory Management** | Users can view, add, and delete memories through a Settings modal interface |
-| **Core Facts from Settings** | User profile info (nickname, occupation, about) is stored as `core_fact` type memories |
+| **Automatic Fact Extraction** | A lightweight LLM (`llama-3.1-8b-instant`) extracts personal facts after each conversation |
+| **Smart Deduplication** | Three-tier strategy: exact matching, substring containment, token overlap (≥80%) |
+| **Context Injection** | Relevant memories automatically injected into the system prompt |
+| **Manual Memory Management** | Users can view, add, and delete memories through Settings modal |
+| **Core Facts from Settings** | User profile info stored as `core_fact` type memories |
 
 ### ⚡ Real-Time Streaming (SSE)
+
 | Feature | Description |
 |---------|-------------|
-| **Protocol** | Server-Sent Events (SSE) via `sse-starlette` for unidirectional real-time communication |
-| **Robust Parsing** | Custom SSE parser in `api.ts` handles Windows line endings (`\r\n`), multi-line data fields, and event type switching |
-| **Optimized Rendering** | `React.memo()` on `MarkdownRenderer` prevents re-renders during high-frequency token updates |
-| **Smart Auto-Scroll** | Scroll behavior pauses when user scrolls up (>100px from bottom), resumes when near bottom or on new message |
+| **Protocol** | Server-Sent Events (SSE) via `sse-starlette` |
+| **Tool Metadata** | Stream includes `tool_metadata` indicating search/RAG usage |
+| **Robust Parsing** | Custom SSE parser handles Windows line endings, multi-line data, event types |
+| **Optimized Rendering** | `React.memo()` on `MarkdownRenderer` prevents re-renders |
+| **Smart Auto-Scroll** | Pauses when user scrolls up, resumes when near bottom |
 
 ### 🤖 Multi-Model Intelligence
+
 | Feature | Description |
 |---------|-------------|
-| **Groq LPU** | Leverages Groq's Language Processing Unit for near-instant inference |
-| **Dynamic Model Selection** | Users can switch models mid-session via dropdown in the chat input area |
-| **Default Model** | `meta-llama/llama-4-maverick-17b-128e-instruct` (Llama 4 Maverick) |
-| **8 Available Models** | See [Available Models](#-available-models) section for full list |
+| **Groq LPU** | Near-instant inference via Groq's Language Processing Unit |
+| **Dynamic Model Selection** | Switch models mid-session via dropdown |
+| **Default Model** | `meta-llama/llama-4-maverick-17b-128e-instruct` |
+| **8 Available Models** | See [Available Models](#-available-models) section |
 
 ### 🔐 Authentication & Personalization
+
 | Feature | Description |
 |---------|-------------|
-| **Clerk Integration** | Full authentication via `@clerk/nextjs` with modal sign-in/sign-out |
-| **Protected Actions** | Chat sending requires authentication (shows `LoginPromptModal` for unauthenticated users) |
-| **User Settings** | "About You" panel for nickname, occupation, and custom about text |
-| **Conversation History** | Persistent conversations grouped by date (Today, Yesterday, Previous 7 Days, Older) |
+| **Clerk Integration** | Full authentication via `@clerk/nextjs` |
+| **Protected Actions** | Chat/upload requires authentication |
+| **User Settings** | "About You" panel for nickname, occupation, and bio |
+| **Conversation History** | Persistent conversations grouped by date |
 
 ### 🎨 Theme Support
+
 | Feature | Description |
 |---------|-------------|
-| **Dark/Light Mode** | System-aware theming with manual toggle via `next-themes` |
+| **Dark/Light Mode** | System-aware theming with manual toggle |
 | **Smooth Transitions** | CSS transitions on theme change |
 
 ---
 
 ## 🏗️ Architecture Overview
 
-The application follows a **decoupled client-server architecture** with clear separation of concerns.
+The application follows a **decoupled client-server architecture** with tool integration.
 
 ```mermaid
 graph TB
-    subgraph Client["🖥️ Frontend (Next.js 16)"]
+    subgraph Client["Frontend - Next.js 16"]
         direction TB
         UI["React UI Components"]
         Context["ChatContext Provider"]
-        API_Client["API Client (Fetch + SSE)"]
+        API_Client["API Client - Fetch + SSE"]
         Auth["Clerk Authentication"]
     end
 
-    subgraph Server["⚙️ Backend (FastAPI)"]
+    subgraph Server["Backend - FastAPI"]
         direction TB
         Routes["API Routes"]
         
-        subgraph Agent["🤖 LangGraph Agent"]
-            LoadMem["load_memory Node"]
-            Generate["generate_response Node"]
-            Extract["extract_memories Node"]
+        subgraph Agent["LangGraph Agent"]
+            LoadMem["load_memory"]
+            LoadTools["load_tool_context"]
+            Generate["generate_response"]
+            Extract["extract_memories"]
+        end
+        
+        subgraph Tools["Tool System"]
+            SearchTool["SearchTool - Tavily"]
+            ReaderTool["ReaderTool - Article Fetcher"]
+            RAGRetriever["RAGRetriever"]
         end
         
         MemMgr["MemoryManager"]
-        Checkpoint["MongoDBSaver Checkpointer"]
-        Store["MongoDBStore"]
+        RAGStore["RAGStore - GridFS + Chunks"]
     end
 
-    subgraph External["☁️ External Services"]
-        MongoDB[("MongoDB Local")]
+    subgraph External["External Services"]
+        MongoDB[("MongoDB Atlas")]
         Groq["Groq Cloud API"]
+        Tavily["Tavily Search API"]
+        Ollama["Ollama Embeddings"]
         ClerkAPI["Clerk API"]
     end
 
@@ -118,18 +168,21 @@ graph TB
     API_Client -->|"REST/SSE"| Routes
     Routes --> Agent
     LoadMem --> MemMgr
+    LoadTools --> Tools
+    SearchTool --> Tavily
+    RAGRetriever --> RAGStore
+    RAGStore --> Ollama
     Generate -->|"Streaming"| Groq
     Extract --> MemMgr
-    MemMgr --> Store
-    Store --> MongoDB
-    Checkpoint --> MongoDB
+    MemMgr --> MongoDB
+    RAGStore --> MongoDB
 ```
 
 ---
 
 ## 🔬 System Design Deep Dive
 
-### Request-Response Lifecycle
+### Request-Response Lifecycle with Tools
 
 ```mermaid
 sequenceDiagram
@@ -138,45 +191,63 @@ sequenceDiagram
     participant Frontend
     participant FastAPI
     participant LangGraph
-    participant MemoryMgr
+    participant Tools
+    participant Tavily
+    participant RAGStore
     participant Groq
     participant MongoDB
 
-    User->>Frontend: Send Message
-    Frontend->>FastAPI: POST /api/chat/stream
+    User->>Frontend: Send Message + Toggle Search
+    Frontend->>FastAPI: POST /api/chat/stream with tool_mode
     FastAPI->>LangGraph: stream_chat()
     
     rect rgb(240, 248, 255)
-        Note over LangGraph: Step 1: Load Memory
-        LangGraph->>MemoryMgr: get_context_memories(query)
-        MemoryMgr->>MongoDB: Query memory_store collection
-        MongoDB-->>MemoryMgr: Return user memories
-        MemoryMgr-->>LangGraph: Formatted memory context string
+        Note over LangGraph: Step 1 - Load Memory
+        LangGraph->>MongoDB: Query memory_store
+        MongoDB-->>LangGraph: User memories
+    end
+
+    rect rgb(255, 240, 245)
+        Note over LangGraph: Step 2 - Load Tool Context
+        LangGraph->>Tools: get_tool_context()
+        
+        alt Search Enabled
+            Tools->>Tavily: Search query
+            Tavily-->>Tools: Search results + answer
+            Tools->>Tools: ReaderTool fetches top URLs
+        end
+        
+        alt RAG Documents Exist
+            Tools->>RAGStore: retrieve(query, conversation_id)
+            RAGStore->>MongoDB: Query rag_chunks with embeddings
+            MongoDB-->>RAGStore: Relevant chunks
+            RAGStore-->>Tools: Formatted RAG context
+        end
+        
+        Tools-->>LangGraph: Combined tool context
     end
 
     rect rgb(255, 248, 240)
-        Note over LangGraph: Step 2: Generate Response
-        LangGraph->>Groq: astream() with system prompt + memories
+        Note over LangGraph: Step 3 - Generate Response
+        LangGraph->>Groq: astream() with tools context
         loop Token Stream
             Groq-->>LangGraph: Token chunk
             LangGraph-->>FastAPI: yield chunk
-            FastAPI-->>Frontend: SSE: event=message, data=chunk
-            Frontend-->>User: Update assistant message content
+            FastAPI-->>Frontend: SSE event=message
+            Frontend-->>User: Update message
         end
     end
 
     rect rgb(240, 255, 240)
-        Note over LangGraph: Step 3: Extract Facts (Post-Stream)
-        LangGraph->>Groq: invoke() with llama-3.1-8b-instant
-        Groq-->>LangGraph: JSON array of facts
-        LangGraph->>MemoryMgr: save_facts_batch()
-        MemoryMgr->>MemoryMgr: Deduplicate (3 strategies)
-        MemoryMgr->>MongoDB: Store new facts in memory_store
+        Note over LangGraph: Step 4 - Extract Memories
+        LangGraph->>Groq: Extract facts with llama-3.1-8b
+        Groq-->>LangGraph: JSON facts array
+        LangGraph->>MongoDB: Store new facts
     end
 
-    FastAPI->>MongoDB: Save conversation to conversations collection
-    FastAPI-->>Frontend: SSE: event=done, data={conversation_id, model_used}
-    Frontend-->>User: Update UI complete
+    FastAPI->>MongoDB: Save conversation
+    FastAPI-->>Frontend: SSE event=done with tool_metadata
+    Frontend-->>User: Show tool usage indicators
 ```
 
 ### LangGraph State Machine
@@ -185,40 +256,234 @@ The backend uses LangGraph's `StateGraph` with a `ChatState` TypedDict:
 
 ```python
 class ChatState(TypedDict):
-    messages: Annotated[list, add_messages]  # Conversation messages
-    user_id: str                             # User identifier
-    model_name: str                          # Selected LLM model
-    memory_context: str                      # Formatted memories string
-    last_user_message: str                   # For extraction
-    last_assistant_response: str             # For extraction
+    messages: Annotated[list, add_messages]  # Conversation history
+    user_id: str                              # User identifier
+    model_name: str                           # Selected LLM model
+    memory_context: str                       # Formatted memories
+    last_user_message: str                    # For extraction
+    last_assistant_response: str              # For extraction
+    tool_context: str                         # Search/RAG results
+    tool_mode: str                            # auto/search/none
+    use_rag: bool                             # Whether to use RAG
+    conversation_id: str                      # Thread ID
+    tool_metadata: dict                       # {search_used, rag_used, ...}
 ```
 
 ```mermaid
 stateDiagram-v2
     [*] --> load_memory: START
-    load_memory --> generate_response: Memory Context Ready
+    load_memory --> load_tool_context: Memory Context Ready
+    load_tool_context --> generate_response: Tool Context Ready
     generate_response --> extract_memories: Response Complete
     extract_memories --> [*]: END
 
     state load_memory {
         [*] --> QueryMemoryStore
-        QueryMemoryStore --> FormatContext
-        FormatContext --> [*]
+        QueryMemoryStore --> FormatMemoryContext
+        FormatMemoryContext --> [*]
+    }
+
+    state load_tool_context {
+        [*] --> CheckToolMode
+        CheckToolMode --> RunSearch: search or auto_detected
+        CheckToolMode --> CheckRAG: no search needed
+        RunSearch --> FetchArticles: Get detailed content
+        FetchArticles --> CheckRAG
+        CheckRAG --> RetrieveChunks: has documents
+        CheckRAG --> CombineContext: no documents
+        RetrieveChunks --> CombineContext
+        CombineContext --> [*]
     }
 
     state generate_response {
         [*] --> BuildSystemPrompt
-        BuildSystemPrompt --> StreamFromGroq
-        StreamFromGroq --> AccumulateResponse
-        AccumulateResponse --> [*]
+        BuildSystemPrompt --> InjectToolContext
+        InjectToolContext --> StreamFromGroq
+        StreamFromGroq --> [*]
     }
 
     state extract_memories {
-        [*] --> AnalyzeWithLlama8B
-        AnalyzeWithLlama8B --> ParseJSONFacts
-        ParseJSONFacts --> DeduplicateAndSave
+        [*] --> AnalyzeConversation
+        AnalyzeConversation --> DeduplicateAndSave
         DeduplicateAndSave --> [*]
     }
+```
+
+---
+
+## 🔧 Tool System (Search & RAG)
+
+### Search Tool Architecture
+
+```mermaid
+flowchart TB
+    subgraph Input["User Query"]
+        Query["Message + tool_mode"]
+    end
+
+    subgraph Detection["Search Detection"]
+        AutoDetect{"Auto-detect<br/>patterns?"}
+        ForceSearch{"tool_mode<br/>= search?"}
+    end
+
+    subgraph SearchTool["SearchTool Class"]
+        TavilyAPI["Tavily API via httpx"]
+        RetryLogic["Retry Logic - 2 attempts"]
+        ConfidenceScore["Score sources HIGH/MED/LOW"]
+    end
+
+    subgraph ReaderTool["ReaderTool Class"]
+        FetchURL["Fetch top 2 URLs"]
+        ParseHTML["BeautifulSoup parsing"]
+        ExtractContent["Extract article content"]
+    end
+
+    subgraph Output["Search Context"]
+        Results["Formatted results with URLs"]
+        Instructions["Grounding instructions for LLM"]
+    end
+
+    Query --> ForceSearch
+    ForceSearch -->|Yes| SearchTool
+    ForceSearch -->|No| AutoDetect
+    AutoDetect -->|Yes| SearchTool
+    AutoDetect -->|No| Skip["Skip Search"]
+    
+    SearchTool --> TavilyAPI
+    TavilyAPI --> RetryLogic
+    RetryLogic --> ConfidenceScore
+    ConfidenceScore --> ReaderTool
+    ReaderTool --> FetchURL
+    FetchURL --> ParseHTML
+    ParseHTML --> ExtractContent
+    ExtractContent --> Results
+    Results --> Instructions
+```
+
+### Search Auto-Detection Patterns
+
+```python
+SEARCH_INDICATORS = [
+    # Time-sensitive
+    r"\b(today|yesterday|this week|current|latest|recent|now|202[0-9])\b",
+    
+    # Events and schedules  
+    r"\b(when is|when's|when will|what date|exact date)\b",
+    r"\b(next|upcoming|scheduled|event|fight|match|game)\b",
+    r"\b(ufc|nfl|nba|mlb|premier league)\b",
+    
+    # Real-time info
+    r"\b(weather|forecast|temperature)\b.*\b(in|at|for)\b",
+    r"\b(stock|share|market|trading)\b.*\b(price|value)\b",
+    r"\b(news|headlines|latest)\b",
+    
+    # Search-like queries
+    r"\b(search|look up|find|google|check)\b",
+]
+
+NO_SEARCH_INDICATORS = [
+    r"\b(explain|teach me|how does .* work|what is the concept)\b",
+    r"\b(write|create|generate|make|code|implement)\b",
+    r"\b(translate|summarize|rewrite)\b",
+    r"\b(my|our|we|I)\b.*(document|pdf|file|upload)",
+]
+```
+
+### Tool Grounding Instructions
+
+When tools return results, the LLM receives strict instructions to prevent generic responses:
+
+```
+=== CRITICAL: TOOL RESULTS PROVIDED - YOU MUST USE THEM ===
+
+1. USE THE DATA: Extract specific facts, dates, names from the results
+2. CITE SOURCES: Include source URLs in format [Source Name](URL)
+3. BE SPECIFIC: Include exact dates, times, locations found
+4. NO GENERIC RESPONSES: Don't say "check the website" - results ARE current
+5. ACKNOWLEDGE LIMITATIONS: If results don't have the answer, say what IS available
+
+FORBIDDEN RESPONSES:
+- "I recommend checking [website] for the latest information"
+- "I don't have access to real-time data"
+- "As of my knowledge cutoff..."
+```
+
+### RAG Pipeline Architecture
+
+```mermaid
+flowchart TB
+    subgraph Upload["PDF Upload Flow"]
+        PDF["PDF File"]
+        Extract["pdfplumber.extract_text()"]
+        Chunk["Custom chunking with sentence boundaries"]
+        Embed["OllamaEmbeddings - nomic-embed-text"]
+        StoreChunks["Store chunks + embeddings"]
+        StoreFile["Store PDF in GridFS"]
+    end
+
+    subgraph Query["Query Flow"]
+        UserQuery["User Question"]
+        QueryEmbed["Embed query with Ollama"]
+        FetchChunks["Fetch all conversation chunks"]
+        CalcSim["Calculate cosine similarity"]
+        TopK["Sort and get top K"]
+        Filter["Filter score > 0.3"]
+        Format["Format RAG context"]
+    end
+
+    subgraph Storage["MongoDB Collections"]
+        RagDocs["rag_documents"]
+        RagChunks["rag_chunks"]
+        RagFiles["rag_files GridFS"]
+    end
+
+    PDF --> Extract
+    Extract --> Chunk
+    Chunk --> Embed
+    Embed --> StoreChunks
+    PDF --> StoreFile
+    StoreChunks --> RagChunks
+    StoreFile --> RagFiles
+
+    UserQuery --> QueryEmbed
+    QueryEmbed --> FetchChunks
+    FetchChunks --> RagChunks
+    RagChunks --> CalcSim
+    CalcSim --> TopK
+    TopK --> Filter
+    Filter --> Format
+```
+
+### RAG Storage Schema
+
+```python
+# rag_documents collection - Document metadata
+{
+    "_id": "document_uuid",           # Unique document ID
+    "filename": "report.pdf",         # Original filename
+    "user_id": "clerk_user_id",       # Owner
+    "conversation_id": "conv_uuid",   # Scoped to conversation
+    "file_id": ObjectId("..."),       # GridFS reference
+    "chunk_count": 15,                # Number of chunks
+    "text_length": 12500,             # Total characters
+    "created_at": datetime            # Upload timestamp
+}
+
+# rag_chunks collection - Text chunks with embeddings
+{
+    "_id": "doc_uuid_chunk_0",         # Composite ID
+    "document_id": "doc_uuid",         # Parent document
+    "conversation_id": "conv_uuid",    # For efficient querying
+    "user_id": "clerk_user_id",        # Owner
+    "chunk_index": 0,                  # Order in document
+    "text": "chunk text content...",   # Actual text
+    "embedding": [0.123, -0.456, ...], # 768-dim nomic-embed-text vector
+    "created_at": datetime             # Creation timestamp
+}
+
+# Retrieval uses cosine similarity:
+# score = dot(query_embedding, chunk_embedding) / (||query|| * ||chunk||)
+# Chunks with score > 0.3 are included in context
 ```
 
 ---
@@ -233,15 +498,12 @@ stateDiagram-v2
 | **React** | 19.2.3 | UI library |
 | **TypeScript** | 5.x | Type safety |
 | **Tailwind CSS** | 4.1.18 | Utility-first styling |
-| **Radix UI** | Latest | Accessible UI primitives (avatar, dialog, dropdown-menu, scroll-area, separator, tooltip) |
-| **Clerk** | 6.36.7 | Authentication (`@clerk/nextjs`) |
+| **Radix UI** | Latest | Accessible UI primitives |
+| **Clerk** | 6.36.7 | Authentication |
 | **next-themes** | 0.4.6 | Dark/Light mode theming |
 | **Lucide React** | 0.562.0 | Icon library |
 | **react-markdown** | 10.1.0 | Markdown rendering |
-| **react-syntax-highlighter** | 16.1.0 | Code block syntax highlighting (Prism + One Dark theme) |
-| **tailwind-merge** | 3.4.0 | Merge Tailwind classes |
-| **clsx** | 2.1.1 | Conditional class names |
-| **class-variance-authority** | 0.7.1 | Component variants |
+| **react-syntax-highlighter** | 16.1.0 | Code syntax highlighting |
 
 ### Backend Stack
 
@@ -249,25 +511,28 @@ stateDiagram-v2
 |------------|---------|---------|
 | **FastAPI** | Latest | Async web framework |
 | **Python** | 3.11+ | Runtime |
-| **LangGraph** | Latest | Agent workflow orchestration (StateGraph) |
-| **LangChain Core** | Latest | LLM abstractions |
-| **langchain-groq** | Latest | Groq LLM integration (`ChatGroq`) |
+| **LangGraph** | Latest | Agent workflow orchestration |
+| **LangChain** | Latest | LLM abstractions |
+| **langchain-groq** | Latest | Groq LLM integration |
+| **langchain-ollama** | Latest | Ollama embeddings |
 | **Motor** | Latest | Async MongoDB driver |
-| **PyMongo** | Latest | Sync MongoDB driver (for LangGraph checkpointer) |
-| **langgraph-checkpoint-mongodb** | Latest | `MongoDBSaver` for conversation state persistence |
-| **langgraph-store-mongodb** | Latest | `MongoDBStore` for long-term memory |
-| **Pydantic** | 2.x | Data validation |
-| **pydantic-settings** | Latest | Environment variable management |
-| **SSE-Starlette** | Latest | Server-Sent Events (`EventSourceResponse`) |
-| **uvicorn** | Latest | ASGI server |
+| **PyMongo** | Latest | Sync MongoDB driver |
+| **httpx** | Latest | HTTP client for Tavily |
+| **pdfplumber** | Latest | PDF text extraction |
+| **beautifulsoup4** | Latest | HTML parsing for articles |
+| **tavily-python** | Latest | Tavily search client |
+| **SSE-Starlette** | Latest | Server-Sent Events |
+| **pydantic-settings** | Latest | Environment management |
 
-### Infrastructure
+### External Services
 
 | Service | Purpose |
 |---------|---------|
-| **MongoDB (Local)** | Primary database - stores conversations, memories, user settings, checkpoints |
+| **MongoDB Atlas** | Database - conversations, memories, RAG vectors |
 | **Groq Cloud** | LLM inference with LPU acceleration |
-| **Clerk** | User authentication and session management |
+| **Tavily** | Web search API |
+| **Ollama** | Local embeddings (nomic-embed-text) |
+| **Clerk** | User authentication |
 
 ---
 
@@ -278,47 +543,45 @@ t3_chat/
 ├── 📄 README.md                    # This documentation file
 │
 ├── 📁 backend/                     # FastAPI Backend (Python)
-│   ├── 📄 main.py                  # FastAPI app entry point, CORS, routers
-│   ├── 📄 config.py                # Settings class, AVAILABLE_MODELS list, DEFAULT_MODEL
-│   ├── 📄 database.py              # MongoDB connection management (async + sync clients)
+│   ├── 📄 main.py                  # FastAPI app, CORS, routers
+│   ├── 📄 config.py                # Settings, AVAILABLE_MODELS, env loading
+│   ├── 📄 database.py              # MongoDB connection (async + sync)
 │   ├── 📄 requirements.txt         # Python dependencies
-│   ├── 📄 pyproject.toml           # Python project config
 │   │
 │   ├── 📁 agent/                   # LangGraph AI Agent
 │   │   ├── 📄 __init__.py          # Exports invoke_chat(), stream_chat()
-│   │   ├── 📄 graph.py             # ChatState, graph nodes, create_chat_graph()
+│   │   ├── 📄 graph.py             # ChatState, nodes, create_chat_graph()
 │   │   ├── 📄 llm_provider.py      # get_llm() factory for ChatGroq
-│   │   └── 📄 prompts.py           # SYSTEM_PROMPT, MEMORY_EXTRACTION_PROMPT
+│   │   ├── 📄 prompts.py           # SYSTEM_PROMPT, MEMORY_EXTRACTION_PROMPT
+│   │   └── 📄 tools.py             # SearchTool, ReaderTool, get_tool_context()
+│   │
+│   ├── 📁 rag/                     # RAG Subsystem (NEW)
+│   │   ├── 📄 __init__.py          # Module exports
+│   │   ├── 📄 store.py             # RAGStore - PDF ingestion, chunking, embeddings
+│   │   └── 📄 retriever.py         # RAGRetriever - similarity search
 │   │
 │   ├── 📁 memory/                  # Memory Subsystem
-│   │   ├── 📄 __init__.py          # Module exports
-│   │   ├── 📄 manager.py           # MemoryManager class with CRUD + deduplication
+│   │   ├── 📄 manager.py           # MemoryManager with CRUD + deduplication
 │   │   ├── 📄 store.py             # get_memory_store() -> MongoDBStore
 │   │   ├── 📄 checkpointer.py      # get_checkpointer() -> MongoDBSaver
-│   │   └── 📄 cleanup.py           # cleanup_conversation_memory() for deletions
+│   │   └── 📄 cleanup.py           # cleanup_conversation_memory()
 │   │
 │   ├── 📁 models/                  # Pydantic Schemas
-│   │   ├── 📄 __init__.py          # Schema exports
-│   │   └── 📄 schemas.py           # Message, ChatRequest, ChatResponse, Conversation, etc.
+│   │   └── 📄 schemas.py           # ChatRequest (with tool_mode), ChatResponse, etc.
 │   │
 │   └── 📁 routes/                  # API Endpoints
-│       ├── 📄 __init__.py          # Router exports
 │       ├── 📄 chat.py              # POST /api/chat, POST /api/chat/stream
 │       ├── 📄 conversations.py     # GET/PATCH/DELETE /api/conversations
 │       ├── 📄 models.py            # GET /api/models
-│       └── 📄 users.py             # User profile, About You, memories endpoints
+│       ├── 📄 users.py             # User profile, memories endpoints
+│       └── 📄 rag.py               # POST /api/rag/upload, GET/DELETE documents (NEW)
 │
 └── 📁 frontend/                    # Next.js Frontend (TypeScript)
     ├── 📄 package.json             # Node dependencies
     ├── 📄 next.config.ts           # Next.js configuration
-    ├── 📄 tsconfig.json            # TypeScript config
-    ├── 📄 postcss.config.mjs       # PostCSS for Tailwind
-    ├── 📄 components.json          # shadcn/ui config
-    │
-    ├── 📁 public/                  # Static assets
     │
     └── 📁 src/
-        ├── 📄 middleware.ts        # Clerk middleware (clerkMiddleware)
+        ├── 📄 middleware.ts        # Clerk middleware
         │
         ├── 📁 app/                 # Next.js App Router
         │   ├── 📄 layout.tsx       # Root layout with ClerkProvider
@@ -327,22 +590,17 @@ t3_chat/
         │
         ├── 📁 components/          # React Components
         │   ├── 📄 MainLayout.tsx   # App shell (ThemeProvider + ChatProvider)
-        │   ├── 📄 ChatArea.tsx     # Chat interface, message list, input area
-        │   ├── 📄 Sidebar.tsx      # Conversation list, user profile, settings button
-        │   ├── 📄 MarkdownRenderer.tsx  # Memoized markdown with syntax highlighting
-        │   ├── 📄 SettingsModal.tsx    # About You + Memory management tabs
-        │   ├── 📄 LoginPromptModal.tsx # Auth prompt for unauthenticated users
-        │   ├── 📄 ThemeToggle.tsx  # Dark/light mode toggle button
-        │   ├── 📄 theme-provider.tsx   # next-themes ThemeProvider wrapper
+        │   ├── 📄 ChatArea.tsx     # Chat interface with search/upload buttons (UPDATED)
+        │   ├── 📄 Sidebar.tsx      # Conversation list, user profile
+        │   ├── 📄 MarkdownRenderer.tsx  # Memoized markdown rendering
+        │   ├── 📄 SettingsModal.tsx    # About You + Memory tabs
+        │   ├── 📄 LoginPromptModal.tsx # Auth prompt
         │   └── 📁 ui/              # shadcn/ui components
-        │       ├── avatar.tsx, button.tsx, dropdown-menu.tsx, input.tsx
-        │       ├── scroll-area.tsx, separator.tsx, sheet.tsx
-        │       ├── textarea.tsx, tooltip.tsx
         │
         └── 📁 lib/                 # Utilities & Context
-            ├── 📄 api.ts           # API client, streamMessage() SSE parser
-            ├── 📄 chat-context.tsx # ChatProvider with global state
-            └── 📄 utils.ts         # cn() helper (clsx + tailwind-merge)
+            ├── 📄 api.ts           # API client with RAG functions (UPDATED)
+            ├── 📄 chat-context.tsx # ChatProvider with search/RAG state (UPDATED)
+            └── 📄 utils.ts         # cn() helper
 ```
 
 ---
@@ -352,46 +610,49 @@ t3_chat/
 ```mermaid
 graph TD
     subgraph App["Next.js App"]
-        Layout["layout.tsx<br/>(ClerkProvider)"]
+        Layout["layout.tsx - ClerkProvider"]
         Page["page.tsx"]
     end
 
     subgraph MainLayout["MainLayout.tsx"]
-        ThemeProvider["ThemeProvider<br/>(next-themes)"]
-        ChatProvider["ChatProvider<br/>(chat-context)"]
+        ThemeProvider["ThemeProvider"]
+        ChatProvider["ChatProvider"]
         Shell["Flex Container"]
     end
 
     subgraph Sidebar["Sidebar.tsx"]
         NewChatBtn["New Chat Button"]
         SearchInput["Search Input"]
-        ConvoList["Grouped Conversation List"]
-        UserProfile["User Avatar + Email"]
+        ConvoList["Conversation List"]
+        UserProfile["User Profile"]
         SettingsBtn["Settings Button"]
     end
 
     subgraph ChatArea["ChatArea.tsx"]
-        Header["Top Header (Theme Toggle)"]
-        EmptyState["Empty State (Quick Actions)"]
-        MessageList["ScrollArea with Messages"]
-        InputArea["Textarea + Model Dropdown"]
-        ScrollBtn["Scroll to Bottom Button"]
+        Header["Theme Toggle"]
+        EmptyState["Quick Actions"]
+        MessageList["Message List"]
+        ToolIndicators["Search/RAG Indicators"]
+        InputArea["Input + Controls"]
     end
 
-    subgraph Shared["Shared Components"]
-        MarkdownRenderer["MarkdownRenderer<br/>(react-markdown + Prism)"]
-        SettingsModal["SettingsModal<br/>(About You + Memory tabs)"]
-        LoginModal["LoginPromptModal"]
+    subgraph InputControls["Input Area Controls"]
+        ModelDropdown["Model Selector"]
+        SearchToggle["Search Toggle Button"]
+        UploadButton["PDF Upload Button"]
+        DocBadge["Document Count Badge"]
+        SendButton["Send Button"]
     end
 
     Layout --> Page
     Page --> MainLayout
-    MainLayout --> ThemeProvider --> ChatProvider --> Shell
+    MainLayout --> Shell
     Shell --> Sidebar
     Shell --> ChatArea
-    ChatArea --> MessageList --> MarkdownRenderer
-    Sidebar --> SettingsModal
-    ChatArea --> LoginModal
+    ChatArea --> MessageList
+    ChatArea --> ToolIndicators
+    ChatArea --> InputArea
+    InputArea --> InputControls
 ```
 
 ---
@@ -400,20 +661,32 @@ graph TD
 
 ### Frontend State Management
 
-The `ChatContext` in [chat-context.tsx](frontend/src/lib/chat-context.tsx) provides global state:
+The `ChatContext` provides global state including tool settings:
 
 ```typescript
 interface ChatContextType {
-    // State
-    messages: Message[];           // Current conversation messages
-    isLoading: boolean;            // Loading state during API calls
-    error: string | null;          // Error message if any
-    conversationId: string | null; // Current conversation ID
-    conversations: ConversationSummary[]; // All user conversations
-    selectedModel: string;         // Currently selected LLM model
-    models: ModelInfo[];           // Available models from API
-    userId: string;                // Clerk user ID or 'anonymous-user'
-    isAuthenticated: boolean;      // Whether user is signed in
+    // Messages
+    messages: Message[];
+    isLoading: boolean;
+    error: string | null;
+
+    // Conversation
+    conversationId: string | null;
+    conversations: ConversationSummary[];
+
+    // Model
+    selectedModel: string;
+    models: ModelInfo[];
+
+    // User
+    userId: string;
+    isAuthenticated: boolean;
+
+    // Tool Settings (NEW)
+    searchEnabled: boolean;
+    setSearchEnabled: (enabled: boolean) => void;
+    documentCount: number;
+    lastToolMetadata: ToolMetadata | null;
 
     // Actions
     sendChatMessage: (content: string) => Promise<void>;
@@ -421,97 +694,39 @@ interface ChatContextType {
     selectConversation: (id: string) => Promise<void>;
     deleteConversation: (id: string) => Promise<void>;
     setSelectedModel: (modelId: string) => void;
-    refreshConversations: () => Promise<void>;
+    uploadDocument: (file: File) => Promise<string | null>;  // NEW
+    refreshDocumentCount: () => Promise<void>;  // NEW
 }
 ```
 
 ```mermaid
 flowchart LR
-    subgraph ChatContext["ChatContext (Global State)"]
+    subgraph ChatContext["ChatContext State"]
         direction TB
         Messages["messages[]"]
         ConvoId["conversationId"]
-        Convos["conversations[]"]
         Model["selectedModel"]
-        Loading["isLoading"]
-        UserId["userId (from Clerk)"]
+        SearchEnabled["searchEnabled"]
+        DocCount["documentCount"]
+        ToolMeta["lastToolMetadata"]
     end
 
     subgraph Actions["Actions"]
         SendMsg["sendChatMessage()"]
+        ToggleSearch["setSearchEnabled()"]
+        UploadDoc["uploadDocument()"]
         NewChat["startNewChat()"]
-        SelectConvo["selectConversation()"]
-        DeleteConvo["deleteConversation()"]
-        SetModel["setSelectedModel()"]
     end
 
     subgraph Components["Components"]
         ChatArea["ChatArea"]
         Sidebar["Sidebar"]
-        Settings["SettingsModal"]
     end
 
     Components -->|"useChat()"| ChatContext
     Components -->|"dispatch"| Actions
     Actions -->|"update"| ChatContext
-    Actions -->|"fetch"| API["API Layer (api.ts)"]
-```
-
-### Backend Data Models (MongoDB Collections)
-
-```mermaid
-erDiagram
-    USERS ||--o{ CONVERSATIONS : has
-    USERS ||--o{ MEMORY_STORE : has
-    USERS ||--|| USER_SETTINGS : has
-    CONVERSATIONS ||--|{ MESSAGES : contains
-
-    USERS {
-        string _id PK "Clerk User ID"
-        string email
-        string name
-        string image_url
-    }
-
-    CONVERSATIONS {
-        string _id PK "UUID"
-        string user_id FK
-        string title "Auto-generated from first message"
-        string model_name
-        array messages "Embedded Message documents"
-        datetime created_at
-        datetime updated_at
-    }
-
-    MESSAGES {
-        string role "user | assistant | system"
-        string content
-        datetime timestamp
-    }
-
-    MEMORY_STORE {
-        string namespace "['user_memories', user_id]"
-        string key PK "fact_hash or pref_category or core_*"
-        object value "Contains type, content, source, created_at"
-    }
-
-    USER_SETTINGS {
-        string _id PK "User ID"
-        string nickname
-        string occupation
-        string about
-        boolean memory_enabled
-    }
-
-    CHECKPOINTS {
-        string thread_id "Conversation ID"
-        object state "LangGraph state snapshot"
-    }
-
-    CHECKPOINT_WRITES {
-        string thread_id "Conversation ID"
-        object data "Graph operation data"
-    }
+    Actions -->|"fetch"| API["API Layer"]
 ```
 
 ---
@@ -520,45 +735,91 @@ erDiagram
 
 ### Chat Endpoints
 
-| Method | Endpoint | Description | Request Body |
-|--------|----------|-------------|--------------|
+| Method | Endpoint | Description | Body |
+|--------|----------|-------------|------|
 | `POST` | `/api/chat` | Send message, get full response | `ChatRequest` |
 | `POST` | `/api/chat/stream` | Send message, stream response (SSE) | `ChatRequest` |
 
-**ChatRequest Schema:**
+**ChatRequest Schema (Updated):**
 ```json
 {
     "message": "string",
     "user_id": "string",
     "conversation_id": "string | null",
-    "model_name": "string | null"
+    "model_name": "string | null",
+    "tool_mode": "auto | search | none",  // NEW
+    "use_rag": true                        // NEW
 }
 ```
 
 **SSE Events from `/api/chat/stream`:**
 - `event: message` → `data: <token chunk>`
-- `event: done` → `data: {"conversation_id": "...", "model_used": "..."}`
+- `event: done` → `data: {"conversation_id": "...", "model_used": "...", "tool_metadata": {...}}`
 - `event: error` → `data: <error message>`
+
+**Tool Metadata:**
+```json
+{
+    "search_used": true,
+    "rag_used": false,
+    "search_query": "when is next ufc event",
+    "rag_chunks": 0
+}
+```
+
+**Important Implementation Note:**  
+The frontend uses a `useRef` pattern (`conversationIdRef`) to handle conversation ID updates across async callbacks:
+
+```typescript
+// Prevents stale closure issues where useState doesn't update in time
+const conversationIdRef = useRef<string | null>(null);
+
+// Sync ref with state
+useEffect(() => {
+    conversationIdRef.current = conversationId;
+}, [conversationId]);
+
+// In async callbacks, use ref instead of state:
+const currentConversationId = conversationIdRef.current;
+```
+
+### RAG Endpoints (NEW)
+
+| Method | Endpoint | Description | Body/Params |
+|--------|----------|-------------|-------------|
+| `POST` | `/api/rag/upload` | Upload PDF document | `multipart/form-data: file, user_id, conversation_id?` |
+| `GET` | `/api/rag/documents` | List documents for conversation | `user_id, conversation_id` |
+| `DELETE` | `/api/rag/documents/{id}` | Delete document | `user_id` |
+| `GET` | `/api/rag/documents/{conversation_id}/count` | Get document count | `user_id` |
+
+**Upload Response:**
+```json
+{
+    "document_id": "uuid",
+    "conversation_id": "uuid",
+    "filename": "report.pdf",
+    "chunk_count": 15,
+    "text_length": 12500,
+    "message": "Document uploaded and processed successfully"
+}
+```
 
 ### Conversation Endpoints
 
-| Method | Endpoint | Description | Query Params |
-|--------|----------|-------------|--------------|
-| `GET` | `/api/conversations` | List user conversations | `user_id`, `limit`, `offset` |
+| Method | Endpoint | Description | Params |
+|--------|----------|-------------|--------|
+| `GET` | `/api/conversations` | List user conversations | `user_id, limit, offset` |
 | `GET` | `/api/conversations/{id}` | Get conversation with messages | `user_id` |
-| `PATCH` | `/api/conversations/{id}` | Update conversation title | `user_id` |
-| `DELETE` | `/api/conversations/{id}` | Delete conversation + cleanup checkpoints | `user_id` |
+| `PATCH` | `/api/conversations/{id}` | Update title | `user_id` |
+| `DELETE` | `/api/conversations/{id}` | Delete conversation | `user_id` |
 
 ### User Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/users/{id}/profile` | Get user profile (creates if not exists) |
-| `PUT` | `/api/users/{id}/profile` | Update user profile |
 | `GET` | `/api/users/{id}/about` | Get "About You" settings |
-| `PUT` | `/api/users/{id}/about` | Update "About You" + sync to memories |
+| `PUT` | `/api/users/{id}/about` | Update "About You" |
 | `GET` | `/api/users/{id}/memories` | List user memories |
-| `POST` | `/api/users/{id}/memories` | Add manual memory (fact) |
 | `DELETE` | `/api/users/{id}/memories/{key}` | Delete specific memory |
 | `DELETE` | `/api/users/{id}/memories` | Clear all memories |
 
@@ -567,14 +828,7 @@ erDiagram
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/models` | List available LLM models |
-| `GET` | `/api/models/default` | Get default model info |
-
-### Health Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
 | `GET` | `/health` | Health check |
-| `GET` | `/` | API info with docs link |
 
 ---
 
@@ -582,94 +836,42 @@ erDiagram
 
 ### How Memory Works
 
-The memory system has two layers:
-1. **Short-term Memory** (Checkpoints) - LangGraph state for conversation continuity
-2. **Long-term Memory** (Memory Store) - Persistent facts about the user
-
 ```mermaid
 flowchart TB
-    subgraph Extraction["Automatic Fact Extraction (Post-Response)"]
-        Conv["User Message + Assistant Response"] --> CheckLength{"Message > 10 chars?<br/>Exchange > 50 chars?"}
-        CheckLength -->|Yes| Analyze["Analyze with llama-3.1-8b-instant"]
-        CheckLength -->|No| Skip1["Skip Extraction"]
-        Analyze --> Parse["Parse JSON Response"]
-        Parse --> Facts["Extracted Facts Array"]
+    subgraph Extraction["Automatic Fact Extraction"]
+        Conv["Conversation"] --> Analyze["Analyze with llama-3.1-8b"]
+        Analyze --> Facts["Extracted Facts"]
     end
 
-    subgraph Dedup["Deduplication Engine (save_facts_batch)"]
-        Facts --> Loop["For each fact"]
-        Loop --> Check1{"Exact Match?<br/>(case-insensitive)"}
-        Check1 -->|Yes| Skip2["Skip"]
-        Check1 -->|No| Check2{"Substring<br/>Contained?"}
-        Check2 -->|Yes| Skip2
-        Check2 -->|No| Check3{"Token Overlap<br/>≥ 80%?"}
-        Check3 -->|Yes| Skip2
+    subgraph Dedup["Deduplication"]
+        Facts --> Check1{"Exact Match?"}
+        Check1 -->|No| Check2{"Substring?"}
+        Check2 -->|No| Check3{"Token Overlap >= 80%?"}
         Check3 -->|No| Save["Save to Store"]
     end
 
-    subgraph Store["MongoDB memory_store Collection"]
-        Save --> MemStore[("key: fact_{hash}<br/>value: {type, content, source, created_at}")]
-    end
-
-    subgraph Usage["Context Injection (load_memory node)"]
-        Query["New User Message"] --> GetMem["MemoryManager.get_context_memories()"]
-        GetMem --> MemStore
-        MemStore --> Format["Format: 'Things I remember about you:\n- fact1\n- fact2'"]
-        Format --> Inject["Inject into SYSTEM_PROMPT"]
+    subgraph Usage["Context Injection"]
+        Query["New Message"] --> GetMem["Get memories"]
+        GetMem --> Format["Format context"]
+        Format --> Inject["Inject into prompt"]
     end
 ```
 
-### Memory Types
+---
 
-| Type | Key Pattern | Source | Example Content |
-|------|-------------|--------|-----------------|
-| `fact` | `fact_{md5hash[:12]}` | Auto-extracted | "User is a Python developer" |
-| `core_fact` | `core_nickname`, `core_occupation`, `core_about` | User settings | "User's name/nickname is John" |
-| `preference` | `pref_{category}` | Manual | Category-based preference |
+## 🗄️ MongoDB Collections
 
-### Deduplication Strategies (in order)
-
-```python
-# Strategy 1: Exact Match (case-insensitive)
-fact_lower = "user is a developer"
-existing_lower = "User is a Developer"
-fact_lower == existing_lower  # True -> Skip
-
-# Strategy 2: Substring Containment
-"user works at google" in "user works at google as an engineer"  # True -> Skip
-"user works at google as an engineer" in "user works at google"  # Also True -> Skip
-
-# Strategy 3: Token Overlap (≥ 80%)
-fact_tokens = {"user", "is", "a", "software", "developer"}
-existing_tokens = {"user", "is", "a", "python", "developer"}
-overlap = len(fact_tokens & existing_tokens) / min(len(fact_tokens), len(existing_tokens))
-# overlap = 4/5 = 0.8 = 80% -> Skip
-```
-
-### Extraction Prompt
-
-The extraction uses `MEMORY_EXTRACTION_PROMPT` in [prompts.py](backend/agent/prompts.py):
-
-```
-Extract important personal facts about the user from this message exchange.
-Focus on information they share ABOUT THEMSELVES.
-
-CRITICAL - Extract these if mentioned:
-- Their name (e.g., "User's name is John")
-- Their location/city
-- Their job/profession/occupation
-- Their interests and hobbies
-- Their goals or what they're working on
-- Their preferences
-
-Rules:
-- ONLY extract facts the USER explicitly stated about themselves
-- Start each fact with "User's..." or "User is..." or "User works as..."
-- Be specific and concise
-- Do NOT extract facts about topics they asked about
-
-Respond with ONLY a valid JSON array. If no personal facts, respond with [].
-```
+| Collection | Purpose | Key Fields |
+|------------|---------|------------|
+| `conversations` | Chat history | `_id, user_id, title, messages[], model_name` |
+| `memory_store` | Long-term user memories | `namespace, key, value` |
+| `user_settings` | User preferences | `_id, nickname, occupation, about` |
+| `checkpoints` | LangGraph state | `thread_id, state` |
+| `checkpoint_writes` | LangGraph writes | `thread_id, data` |
+| `rag_documents` | PDF metadata | `_id, filename, conversation_id, chunk_count` |
+| `rag_chunks` | Text chunks + embeddings | `document_id, text, embedding[]` |
+| `rag_files.files` | GridFS file metadata | `_id, filename, document_id` |
+| `rag_files.chunks` | GridFS binary data | `files_id, data` |
 
 ---
 
@@ -677,60 +879,45 @@ Respond with ONLY a valid JSON array. If no personal facts, respond with [].
 
 ### Prerequisites
 
-- **Node.js** 18+ (for Next.js 16)
+- **Node.js** 18+
 - **Python** 3.11+
-- **MongoDB** (Local installation recommended - use MongoDB Compass for GUI)
+- **MongoDB Atlas** account (or local MongoDB)
 - **Groq API Key** ([Get one here](https://console.groq.com))
+- **Tavily API Key** ([Get one here](https://tavily.com))
+- **Ollama** running locally with `nomic-embed-text` model
 - **Clerk Account** ([Sign up here](https://clerk.com))
 
-### 1. Clone the Repository
-
-```bash
-git clone <repository-url>
-cd t3_chat
-```
-
-### 2. Backend Setup
+### 1. Clone and Setup Backend
 
 ```bash
 cd backend
 
-# Create virtual environment
+# Create and activate virtual environment
 python -m venv .venv
-
-# Activate (Windows PowerShell)
-.venv\Scripts\Activate.ps1
-
-# Activate (Windows CMD)
-.venv\Scripts\activate.bat
-
-# Activate (Mac/Linux)
-source .venv/bin/activate
+.venv\Scripts\activate  # Windows
+source .venv/bin/activate  # Mac/Linux
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Create .env file (see Environment Variables section)
+# Create .env file (see Environment Variables)
 ```
 
-### 3. Frontend Setup
+### 2. Setup Ollama (for RAG embeddings)
+
+```bash
+# Install Ollama from https://ollama.com
+# Then pull the embedding model:
+ollama pull nomic-embed-text
+```
+
+### 3. Setup Frontend
 
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Create .env.local file (see Environment Variables section)
+# Create .env.local file (see Environment Variables)
 ```
-
-### 4. MongoDB Setup
-
-1. Install MongoDB locally or use MongoDB Atlas
-2. Start MongoDB service (default: `mongodb://localhost:27017`)
-3. The application will automatically create:
-   - Database: `t3_chat`
-   - Collections: `users`, `conversations`, `user_settings`, `memory_store`, `checkpoints`, `checkpoint_writes`
 
 ---
 
@@ -738,32 +925,41 @@ npm install
 
 ### Backend `.env`
 
-Create `backend/.env`:
-
 ```env
 # Required - Groq API
-GROQ_API_KEY=gsk_your_groq_api_key_here
+GROQ_API_KEY=gsk_your_groq_api_key
 
-# MongoDB (defaults shown)
-MONGODB_URL=mongodb://localhost:27017
+# Required - Tavily Search
+TAVILY_API_KEY=tvly-your_tavily_api_key
+
+# MongoDB Atlas
+MONGODB_URL=mongodb+srv://user:pass@cluster.mongodb.net/
 DATABASE_NAME=t3_chat
 
-# Optional - LangSmith Tracing for debugging
+# Ollama Embeddings
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_EMBED_MODEL=nomic-embed-text
+
+# RAG Configuration
+RAG_CHUNK_SIZE=1000
+RAG_CHUNK_OVERLAP=200
+RAG_TOP_K=5
+
+# CORS (comma-separated origins)
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+
+# Optional - LangSmith Tracing
 LANGSMITH_API_KEY=
-LANGSMITH_PROJECT=t3-chat-clone
 LANGSMITH_TRACING=false
-LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 ```
 
 ### Frontend `.env.local`
-
-Create `frontend/.env.local`:
 
 ```env
 # Backend API URL
 NEXT_PUBLIC_API_URL=http://localhost:8000
 
-# Clerk Authentication (from Clerk Dashboard)
+# Clerk Authentication
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
 ```
@@ -776,15 +972,12 @@ CLERK_SECRET_KEY=sk_test_...
 
 ```bash
 cd backend
-
-# Activate virtual environment first, then:
+.venv\Scripts\activate
 uvicorn main:app --reload --port 8000
 ```
 
-The API will be available at:
-- **API Root**: http://localhost:8000
-- **Swagger Docs**: http://localhost:8000/docs
-- **Health Check**: http://localhost:8000/health
+- **API**: http://localhost:8000
+- **Docs**: http://localhost:8000/docs
 
 ### Running the Frontend
 
@@ -793,24 +986,7 @@ cd frontend
 npm run dev
 ```
 
-The app will be available at:
 - **App**: http://localhost:3000
-
-### Available Scripts
-
-**Frontend (npm):**
-```bash
-npm run dev      # Start development server (Turbopack)
-npm run build    # Build for production
-npm run start    # Start production server
-npm run lint     # Run ESLint
-```
-
-**Backend (Python):**
-```bash
-uvicorn main:app --reload    # Development with hot reload
-uvicorn main:app             # Production mode
-```
 
 ---
 
@@ -818,236 +994,37 @@ uvicorn main:app             # Production mode
 
 All models are served via Groq's LPU infrastructure:
 
-| Model | ID | Context Window | Best For |
-|-------|-----|----------------|----------|
-| **Qwen 3 32B** | `qwen/qwen3-32b` | 32K | General tasks |
-| **Groq Compound** | `groq/compound` | 8K | Compound AI tasks |
+| Model | ID | Context | Best For |
+|-------|-----|---------|----------|
 | **Llama 4 Maverick** ⭐ | `meta-llama/llama-4-maverick-17b-128e-instruct` | 128K | Complex reasoning (Default) |
 | **Llama 4 Scout** | `meta-llama/llama-4-scout-17b-16e-instruct` | 128K | Fast exploration |
-| **Kimi K2** | `moonshotai/kimi-k2-instruct-0905` | 128K | Moonshot AI model |
+| **Qwen 3 32B** | `qwen/qwen3-32b` | 32K | General tasks |
+| **Kimi K2** | `moonshotai/kimi-k2-instruct-0905` | 128K | Moonshot AI |
 | **GPT OSS 120B** | `openai/gpt-oss-120b` | 128K | Large-scale tasks |
-| **Llama 3.1 8B Instant** | `llama-3.1-8b-instant` | 128K | Fast responses, fact extraction |
 | **Llama 3.3 70B Versatile** | `llama-3.3-70b-versatile` | 128K | Versatile tasks |
+| **Llama 3.1 8B Instant** | `llama-3.1-8b-instant` | 128K | Fast responses, fact extraction |
+| **Groq Compound** | `groq/compound` | 8K | Compound AI tasks |
 
-⭐ = Default model
+⭐ = Default model for chat, Llama 3.1 8B Instant is used for memory extraction
 
 ---
 
 ## 🎨 UI Features
 
-### Visual Design
-- **Dark/Light Theme**: System-aware with manual toggle in header
-- **Responsive Layout**: Collapsible sidebar for mobile
-- **Glassmorphism**: Backdrop blur effects on input area and buttons
-- **Pink Accent Color**: User messages, buttons, and highlights use `bg-pink-600`
-
 ### Chat Interface
-- **Empty State**: "How can I help you?" with quick action buttons (Create, Explore, Code, Learn)
-- **Message Bubbles**: User messages right-aligned (pink), assistant left-aligned (muted)
-- **Smart Auto-Scroll**: Pauses when user scrolls up >100px, shows "scroll to bottom" button
-- **Loading Indicator**: Spinner during response generation
 
-### Sidebar
-- **New Chat Button**: Prominent pink button at top
-- **Search Input**: Search field for conversations (UI only)
-- **Conversation Grouping**: Today, Yesterday, Previous 7 Days, Older
-- **Delete Button**: Per-conversation trash icon with confirmation
-- **User Profile**: Avatar, name, email, sign-out button
-- **Settings Button**: Opens Settings modal
+- **Search Toggle**: Blue button when enabled, searches the web
+- **Upload Button**: Paperclip icon with document count badge
+- **Tool Indicators**: Shows "Web search used" / "X doc chunk(s) used" above assistant messages
+- **Model Dropdown**: Switch between LLM models
+- **Smart Auto-Scroll**: Pauses when scrolling up
 
-### Markdown Rendering
-- **Code Blocks**: Syntax highlighting with Prism (One Dark theme)
-- **Inline Code**: Pink text on muted background
-- **Lists**: Proper bullet/numbered lists with spacing
-- **Blockquotes**: Pink left border with italic text
-- **Links**: Pink underlined links opening in new tab
-- **Bold/Italic**: LLM streaming artifact normalization (fixes `** text **`)
+### Visual Design
 
-### Settings Modal
-- **About You Tab**: Nickname, occupation, about text inputs
-- **Memory Tab**: List of all memories with delete buttons, clear all option
-
----
-
-## 🔧 Technical Implementation Details
-
-### SSE Stream Parsing (Frontend)
-
-The `streamMessage()` generator in [api.ts](frontend/src/lib/api.ts) implements robust SSE parsing:
-
-```typescript
-// Handle Windows line endings
-const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
-
-// Parse event types
-if (line.startsWith('event: ')) {
-    currentEvent = line.slice(7).trim();
-} else if (line.startsWith('data:')) {
-    // Strict SSE spec: remove "data:" prefix, then one optional space
-    let data = line.slice(5);
-    if (data.startsWith(' ')) data = data.slice(1);
-    dataBuffer.push(data);
-}
-```
-
-### LangGraph Workflow (Backend)
-
-The graph in [graph.py](backend/agent/graph.py) uses LangGraph's StateGraph:
-
-```python
-def create_chat_graph() -> StateGraph:
-    builder = StateGraph(ChatState)
-    
-    # Add nodes
-    builder.add_node("load_memory", load_memory)
-    builder.add_node("generate_response", generate_response)
-    builder.add_node("extract_memories", extract_memories)
-    
-    # Linear flow: START -> load -> generate -> extract -> END
-    builder.add_edge(START, "load_memory")
-    builder.add_edge("load_memory", "generate_response")
-    builder.add_edge("generate_response", "extract_memories")
-    builder.add_edge("extract_memories", END)
-    
-    # Compile with MongoDB checkpointer
-    checkpointer = get_checkpointer()
-    return builder.compile(checkpointer=checkpointer)
-```
-
-### Memory Manager Deduplication
-
-The `MemoryManager` class in [manager.py](backend/memory/manager.py) implements three-tier deduplication:
-
-```python
-def _is_duplicate_fact(self, fact: str, existing_memories: list) -> bool:
-    fact_lower = fact.lower().strip()
-    fact_tokens = set(fact_lower.split())
-    
-    for item in existing_memories:
-        existing_content = value.get("content", "").lower().strip()
-        existing_tokens = set(existing_content.split())
-        
-        # Strategy 1: Exact match
-        if existing_content == fact_lower:
-            return True
-        
-        # Strategy 2: Substring containment
-        if fact_lower in existing_content or existing_content in fact_lower:
-            return True
-        
-        # Strategy 3: Token overlap ≥ 80%
-        if len(fact_tokens) > 2 and len(existing_tokens) > 2:
-            overlap = len(fact_tokens & existing_tokens)
-            similarity = overlap / min(len(fact_tokens), len(existing_tokens))
-            if similarity >= 0.8:
-                return True
-    
-    return False
-```
-
-### Conversation Cleanup
-
-When a conversation is deleted via [cleanup.py](backend/memory/cleanup.py):
-
-1. Delete all `checkpoints` for the thread_id
-2. Delete all `checkpoint_writes` for the thread_id
-3. Delete the conversation document
-4. **Long-term memories are preserved** for future conversations
-
----
-
----
-
-## ☁️ Deployment Guide
-
-### Vercel + AWS EC2 Hybrid Architecture
-
-This project uses a hybrid deployment strategy to get the best of both worlds:
-- **Frontend**: Vercel (Edge Network, Fast CDN, Easy CI/CD)
-- **Backend**: AWS EC2 (Full control, Persistent WebSocket/SSE connections, Dockerized DB)
-
-```mermaid
-graph LR
-    User[User Device]
-    Vercel[Vercel Edge Network]
-    AWS[AWS EC2 Instance]
-    
-    subgraph Frontend
-        Vercel -->|Serves| NextJS[Next.js App]
-    end
-    
-    subgraph Backend_AWS
-        NextJS -->|HTTPS| Nginx[Nginx Reverse Proxy]
-        Nginx -->|Proxy Pass| Uvicorn[Uvicorn ASGI]
-        Uvicorn --> FastAPI[FastAPI App]
-        FastAPI --> MongoDB[(MongoDB Docker)]
-    end
-    
-    User -->|https://t3-chat.vercel.app| Vercel
-    User -->|https://api.manimancer.fun| Nginx
-```
-
-### 1. AWS EC2 Setup (Backend)
-
-We deployed the backend to a **t3.small** Ubuntu 24.04 instance.
-
-**Key Steps:**
-1.  **IAM User**: Created a dedicated `AdminUser` instead of using Root (Best Practice).
-2.  **Security Groups**:
-    -   Opened Port `22` (SSH) for admin access.
-    -   Opened Port `80` (HTTP) and `443` (HTTPS) for public access.
-3.  **Dependencies**:
-    -   Installed `nginx`, `git`, `docker.io`, and `uv` (Astral's fast Python package manager).
-    -   Python 3.13 installed via `uv python install 3.13`.
-
-### 2. HTTPS & SSL (Certbot)
-
-Since Vercel requires a secure backend (`https://`), we configured a custom subdomain.
-
--   **Domain**: `api.manimancer.fun`
--   **Method**: Nginx + Certbot (Let's Encrypt)
--   **Installation**: Used `snap` for Certbot (more reliable than apt on Ubuntu 24.04).
-
-### 3. Frontend Deployment (Vercel)
-
--   **Root Directory**: Set to `frontend/` (Monorepo setup).
--   **Environment Variable**: `NEXT_PUBLIC_API_URL=https://api.manimancer.fun`.
-
----
-
-## 🐛 Troubleshooting & Lessons Learned
-
-During the initial deployment (Jan 2026), we encountered and solved several critical issues. This log serves as a reference for future deployments.
-
-### 🔴 Issue 1: 502 Bad Gateway / Service Exit Code
-**Symptoms**: Nginx was running, but `https://api.manimancer.fun/health` returned 502.
-**Logs**: `sudo journalctl -u t3-backend` showed `ModuleNotFoundError: No module named 'motor'`.
-**Cause**: The `pyproject.toml` file was missing several dependencies (`motor`, `pydantic-settings`, etc.) that were present in `requirements.txt` but not the `uv` lockfile.
-**Fix**:
-1.  Updated `pyproject.toml` to include all missing packages.
-2.  Ran `uv sync` to regenerate the environment.
-3.  Restarted service: `sudo systemctl restart t3-backend`.
-
-### 🔴 Issue 2: Dependency Version Conflict
-**Symptoms**: `uv sync` failed with a conflict error.
-**Cause**: `langgraph-checkpoint-mongodb` required `pymongo<4.16`, but `pyproject.toml` pinned `pymongo>=4.16.0`.
-**Fix**: Downgraded requirement to `pymongo>=4.12.0`.
-
-### 🔴 Issue 3: SSH Lockout (Connection Timed Out)
-**Symptoms**: Suddenly unable to SSH into the server (`ssh: connect to host ... port 22: Connection timed out`).
-**Cause**: The admin's home IP address changed (dynamic ISP IP), causing the AWS Security Group rule "My IP" to block the new IP.
-**Fix**:
-1.  Temporarily allowed `0.0.0.0/0` (Anywhere) for Port 22 in AWS Console.
-2.  Used **EC2 Instance Connect** (Browser-based SSH) as a backup.
-
-### 🔴 Issue 4: Certbot Installation Failure
-**Symptoms**: `sudo apt install python3-certbot-nginx` failed with "Unable to locate package".
-**Cause**: Ubuntu 24.04 repositories occasionally miss the Certbot package or require `universe` enabled.
-**Fix**: Switched to the official `snap` installation method:
-```bash
-sudo snap install --classic certbot
-sudo ln -s /snap/bin/certbot /usr/bin/certbot
-```
+- **Dark/Light Theme**: System-aware with manual toggle
+- **Pink Accent Color**: User messages and primary buttons
+- **Glassmorphism**: Backdrop blur effects
+- **Responsive**: Collapsible sidebar for mobile
 
 ---
 
@@ -1058,5 +1035,5 @@ This project is for educational purposes.
 ---
 
 <p align="center">
-  Built with ❤️ using Next.js 16, FastAPI, LangGraph, and Groq
+  Built with Next.js 16, FastAPI, LangGraph, Groq, Tavily, and Ollama
 </p>
