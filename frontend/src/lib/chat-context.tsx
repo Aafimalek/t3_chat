@@ -206,23 +206,29 @@ export function ChatProvider({ children }: ChatProviderProps) {
                 use_rag: documentCount > 0,
             })) {
                 // Check if this is metadata object (from 'done' event)
-                if (typeof chunk === 'object' && chunk.conversation_id) {
+                // Must check for object type AND that it has conversation_id property
+                if (chunk !== null && typeof chunk === 'object' && 'conversation_id' in chunk) {
+                    const doneData = chunk as { conversation_id: string; model_used: string; tool_metadata?: ToolMetadata };
+                    
                     console.log('[sendChatMessage] Received done event:', {
-                        receivedConversationId: chunk.conversation_id,
+                        receivedConversationId: doneData.conversation_id,
                         currentRefValue: conversationIdRef.current,
                         willUpdate: !conversationIdRef.current,
-                        toolMetadata: chunk.tool_metadata,
+                        toolMetadata: doneData.tool_metadata,
                     });
                     
-                    // Update conversation ID immediately if not set
-                    if (!conversationIdRef.current) {
-                        console.log('[sendChatMessage] Setting conversation ID to:', chunk.conversation_id);
-                        setConversationId(chunk.conversation_id);
-                        conversationIdRef.current = chunk.conversation_id;
+                    // ALWAYS update conversation ID from response if we don't have one
+                    // This ensures subsequent messages use the correct conversation
+                    if (!conversationIdRef.current && doneData.conversation_id) {
+                        console.log('[sendChatMessage] Setting conversation ID to:', doneData.conversation_id);
+                        setConversationId(doneData.conversation_id);
+                        conversationIdRef.current = doneData.conversation_id;
+                        console.log('[sendChatMessage] conversationIdRef.current is now:', conversationIdRef.current);
                     }
+                    
                     // Store tool metadata if present
-                    if (chunk.tool_metadata) {
-                        setLastToolMetadata(chunk.tool_metadata);
+                    if (doneData.tool_metadata) {
+                        setLastToolMetadata(doneData.tool_metadata);
                     }
                 } else if (typeof chunk === 'string') {
                     // Regular content chunk
@@ -241,6 +247,15 @@ export function ChatProvider({ children }: ChatProviderProps) {
                     });
                 }
             }
+            
+            console.log('[sendChatMessage] Stream completed. Final conversationIdRef.current:', conversationIdRef.current);
+            
+            // Debug: log the final state
+            console.log('[sendChatMessage] Final state check:', {
+                conversationIdRef: conversationIdRef.current,
+                conversationIdState: conversationId,
+                fullResponseLength: fullResponse.length,
+            });
 
             // Always refresh conversations list to update message count in sidebar
             await refreshConversations();

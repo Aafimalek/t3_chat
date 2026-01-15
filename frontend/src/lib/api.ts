@@ -84,7 +84,13 @@ export async function sendMessage(request: ChatRequest): Promise<ChatResponse> {
  */
 export async function* streamMessage(
     request: ChatRequest
-): AsyncGenerator<string | { conversation_id: string; model_used: string }, void, unknown> {
+): AsyncGenerator<string | { conversation_id: string; model_used: string; tool_metadata?: ToolMetadata }, void, unknown> {
+    console.log('[streamMessage] Starting with request:', {
+        message: request.message.substring(0, 50),
+        conversation_id: request.conversation_id,
+        user_id: request.user_id,
+    });
+
     const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -129,11 +135,13 @@ export async function* streamMessage(
                     if (currentEvent === 'message') {
                         yield fullData;
                     } else if (currentEvent === 'done') {
+                        console.log('[streamMessage] Received done event, raw data:', fullData);
                         try {
                             const meta = JSON.parse(fullData);
+                            console.log('[streamMessage] Parsed done event:', meta);
                             yield meta;
-                        } catch {
-                            // Ignore parse errors
+                        } catch (e) {
+                            console.error('[streamMessage] Failed to parse done event:', e, 'Data was:', fullData);
                         }
                     }
 
@@ -158,6 +166,8 @@ export async function* streamMessage(
             }
         }
     }
+
+    console.log('[streamMessage] Stream ended');
 }
 
 /**

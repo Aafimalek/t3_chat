@@ -2,6 +2,7 @@
 Chat endpoints with streaming support.
 """
 
+import json
 import uuid
 from datetime import datetime
 
@@ -106,13 +107,16 @@ async def chat_stream(request: ChatRequest):
                 }
             
             # Send completion event with metadata
+            # Explicitly JSON encode to ensure proper SSE format
+            done_data = {
+                "conversation_id": conversation_id,
+                "model_used": model_name,
+                "tool_metadata": tool_metadata,
+            }
+            print(f"[Chat Stream] Sending done event with data: {done_data}")
             yield {
                 "event": "done",
-                "data": {
-                    "conversation_id": conversation_id,
-                    "model_used": model_name,
-                    "tool_metadata": tool_metadata,
-                },
+                "data": json.dumps(done_data),  # Explicitly JSON encode to ensure proper format
             }
             
             # Save conversation after streaming completes
