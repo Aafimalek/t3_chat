@@ -94,7 +94,12 @@ def run_search(query: str, max_results: int = 5) -> dict:
     """
     settings = get_settings()
     
+    # Debug logging
+    print(f"[Search] Running search for: {query}")
+    print(f"[Search] Tavily API key configured: {'Yes' if settings.tavily_api_key else 'No'}")
+    
     if not settings.tavily_api_key:
+        print("[Search] ERROR: Tavily API key not configured!")
         return {
             "query": query,
             "results": [],
@@ -148,22 +153,33 @@ def run_search(query: str, max_results: int = 5) -> dict:
         }
 
 
-def format_search_context(search_results: dict) -> str:
+def format_search_context(search_results: dict, search_requested: bool = False) -> str:
     """
     Format search results as context for the LLM.
     
     Args:
         search_results: Output from run_search()
+        search_requested: Whether search was explicitly requested by user
         
     Returns:
         Formatted context string
     """
+    query = search_results.get("query", "")
+    
+    # Handle errors
+    if search_results.get("error"):
+        error_msg = search_results["error"]
+        if search_requested:
+            return f"Web search was requested but failed: {error_msg}\nPlease acknowledge that you attempted to search but couldn't retrieve results, and provide the best answer you can based on your knowledge while noting this limitation."
+        return f"Search failed: {error_msg}"
+    
+    # Handle no results
     if not search_results.get("results"):
-        if search_results.get("error"):
-            return f"Search failed: {search_results['error']}"
+        if search_requested:
+            return f"Web search for \"{query}\" returned no results.\nPlease acknowledge that you searched but found no results, and provide the best answer you can based on your knowledge while noting this limitation."
         return ""
     
-    context_parts = [f"Web search results for: \"{search_results['query']}\""]
+    context_parts = [f"Web search results for: \"{query}\""]
     
     for i, result in enumerate(search_results["results"], 1):
         if result.get("is_summary"):
@@ -203,6 +219,10 @@ def get_tool_context(
     Returns:
         Tuple of (context_string, metadata_dict)
     """
+    # Debug logging
+    print(f"[Tools] get_tool_context called with tool_mode={tool_mode}, use_rag={use_rag}")
+    print(f"[Tools] Query: {query[:100]}...")
+    
     context_parts = []
     metadata = {
         "search_used": False,
@@ -212,14 +232,32 @@ def get_tool_context(
     }
     
     # Check if search should be used
-    if should_use_search(query, tool_mode):
+    search_explicitly_requested = tool_mode == "search"
+    will_search = should_use_search(query, tool_mode)
+    print(f"[Tools] Search explicitly requested: {search_explicitly_requested}, Will search: {will_search}")
+    
+    if will_search:
         search_results = run_search(query)
-        if search_results.get("success") and search_results.get("results"):
-            search_context = format_search_context(search_results)
+        metadata["search_query"] = query
+        
+        print(f"[Tools] Search results: success={search_results.get('success')}, num_results={len(search_results.get('results', []))}, error={search_results.get('error')}")
+        
+        # When search is explicitly requested, always mark as used and provide context
+        # This ensures the LLM knows search was attempted even if it failed
+        if search_explicitly_requested:
+            metadata["search_used"] = True
+            search_context = format_search_context(search_results, search_requested=True)
+            print(f"[Tools] Search context (explicit): {search_context[:200] if search_context else 'None'}...")
             if search_context:
                 context_parts.append(search_context)
-                metadata["search_used"] = True
-                metadata["search_query"] = query
+        else:
+            # Auto mode - only add context if we got good results
+            if search_results.get("success") and search_results.get("results"):
+                search_context = format_search_context(search_results, search_requested=False)
+                print(f"[Tools] Search context (auto): {search_context[:200] if search_context else 'None'}...")
+                if search_context:
+                    context_parts.append(search_context)
+                    metadata["search_used"] = True
     
     # Get RAG context if conversation has documents
     if use_rag and conversation_id:

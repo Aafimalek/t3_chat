@@ -67,8 +67,18 @@ async def chat_stream(request: ChatRequest):
     
     Uses Server-Sent Events (SSE) for real-time streaming.
     """
+    # Debug logging for request parameters
+    print(f"[Chat Stream] Received request:")
+    print(f"  - conversation_id: {request.conversation_id}")
+    print(f"  - tool_mode: {request.tool_mode}")
+    print(f"  - use_rag: {request.use_rag}")
+    print(f"  - user_id: {request.user_id}")
+    print(f"  - message: {request.message[:50]}...")
+    
     conversation_id = request.conversation_id or str(uuid.uuid4())
     model_name = request.model_name or DEFAULT_MODEL
+    
+    print(f"[Chat Stream] Using conversation_id: {conversation_id} (was new: {request.conversation_id is None})")
     
     async def event_generator():
         """Generate SSE events from the stream."""
@@ -135,6 +145,11 @@ async def _save_conversation(
     tool_metadata: dict | None = None,
 ) -> None:
     """Save or update conversation in MongoDB."""
+    print(f"[_save_conversation] Called with:")
+    print(f"  - conversation_id: {conversation_id}")
+    print(f"  - is_new: {is_new}")
+    print(f"  - user_id: {user_id}")
+    
     db = await get_database()
     conversations = db["conversations"]
     
@@ -154,6 +169,7 @@ async def _save_conversation(
     }
     
     if is_new:
+        print(f"[_save_conversation] Creating NEW conversation: {conversation_id}")
         # Create new conversation
         title = _generate_title(user_message)
         await conversations.insert_one({
@@ -167,8 +183,10 @@ async def _save_conversation(
         })
     else:
         # Check if conversation exists, create if not (for RAG upload before first message)
+        print(f"[_save_conversation] Checking if conversation {conversation_id} exists...")
         existing = await conversations.find_one({"_id": conversation_id})
         if not existing:
+            print(f"[_save_conversation] Conversation NOT found, creating new: {conversation_id}")
             title = _generate_title(user_message)
             await conversations.insert_one({
                 "_id": conversation_id,
@@ -181,6 +199,7 @@ async def _save_conversation(
             })
         else:
             # Update existing conversation
+            print(f"[_save_conversation] Conversation FOUND, updating: {conversation_id}")
             await conversations.update_one(
                 {"_id": conversation_id},
                 {
@@ -190,6 +209,7 @@ async def _save_conversation(
                     "$set": {"updated_at": now},
                 }
             )
+            print(f"[_save_conversation] Successfully updated conversation: {conversation_id}")
 
 
 def _generate_title(message: str, max_length: int = 50) -> str:

@@ -6,10 +6,30 @@ import uuid
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel
 
-from rag.store import get_rag_store
+# Import RAG store with error handling
+_rag_store_error = None
+try:
+    from rag.store import get_rag_store
+    print("[RAG Router] Successfully imported RAG store")
+except Exception as e:
+    _rag_store_error = str(e)
+    print(f"[RAG Router] ERROR importing RAG store: {e}")
+    import traceback
+    traceback.print_exc()
+    
+    # Define a dummy function to avoid NameError
+    def get_rag_store():
+        raise RuntimeError(f"RAG store failed to initialize: {_rag_store_error}")
 
 
 router = APIRouter(prefix="/api/rag", tags=["RAG"])
+
+
+@router.get("/test")
+async def test_rag_route():
+    """Simple test endpoint to verify RAG router is working."""
+    print("[RAG Test] Test endpoint hit!", flush=True)
+    return {"status": "ok", "message": "RAG router is working"}
 
 
 # ============================================================================
@@ -50,7 +70,7 @@ class DocumentListResponse(BaseModel):
 async def upload_document(
     file: UploadFile = File(...),
     user_id: str = Form(...),
-    conversation_id: str | None = Form(None),
+    conversation_id: str | None = Form(default=None),
 ):
     """
     Upload a PDF document for RAG.
@@ -62,6 +82,18 @@ async def upload_document(
     
     If no conversation_id is provided, a new one will be created.
     """
+    import traceback
+    
+    try:
+        # Log incoming request
+        print(f"[RAG Upload] Received upload request:", flush=True)
+        print(f"  - filename: {file.filename}", flush=True)
+        print(f"  - user_id: {user_id}", flush=True)
+        print(f"  - conversation_id: {conversation_id or '(will create new)'}", flush=True)
+    except Exception as e:
+        print(f"[RAG Upload] Error logging request: {e}", flush=True)
+        traceback.print_exc()
+    
     # Validate file type
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
@@ -106,6 +138,8 @@ async def upload_document(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail=f"Failed to process document: {str(e)}"

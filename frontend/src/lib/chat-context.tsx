@@ -84,12 +84,18 @@ export function ChatProvider({ children }: ChatProviderProps) {
     const [documentCount, setDocumentCount] = useState(0);
     const [lastToolMetadata, setLastToolMetadata] = useState<ToolMetadata | null>(null);
 
-    // Track if we got a conversation ID from streaming
-    const pendingConversationId = useRef<string | null>(null);
+    // Track the current conversation ID in a ref for immediate access in callbacks
+    // This solves the closure issue where state updates don't reflect immediately
+    const conversationIdRef = useRef<string | null>(null);
 
     // Get user ID from Clerk or use a default for non-authenticated users
     const userId = user?.id || 'anonymous-user';
     const isAuthenticated = isSignedIn ?? false;
+    
+    // Keep ref in sync with state
+    useEffect(() => {
+        conversationIdRef.current = conversationId;
+    }, [conversationId]);
 
     // Load models on mount
     useEffect(() => {
@@ -130,10 +136,13 @@ export function ChatProvider({ children }: ChatProviderProps) {
 
     const uploadDocument = useCallback(async (file: File): Promise<string | null> => {
         try {
-            const result = await uploadRagDocument(file, userId, conversationId || undefined);
+            // Use ref to get current conversation ID
+            const currentConversationId = conversationIdRef.current;
+            const result = await uploadRagDocument(file, userId, currentConversationId || undefined);
             // If this was a new conversation, update the conversation ID
-            if (!conversationId && result.conversation_id) {
+            if (!currentConversationId && result.conversation_id) {
                 setConversationId(result.conversation_id);
+                conversationIdRef.current = result.conversation_id;
             }
             // Refresh document count
             setDocumentCount(prev => prev + 1);
@@ -142,7 +151,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
             setError(err instanceof Error ? err.message : 'Failed to upload document');
             return null;
         }
-    }, [conversationId, userId]);
+    }, [userId]);
 
     const sendChatMessage = useCallback(async (content: string) => {
         if (!content.trim()) return;
@@ -173,22 +182,43 @@ export function ChatProvider({ children }: ChatProviderProps) {
             // Determine tool mode based on search toggle
             const toolMode = searchEnabled ? 'search' : 'auto';
 
+            // Use the ref for conversation ID to get the most current value
+            // This fixes the issue where subsequent messages in a new chat
+            // would use stale null value from closure
+            const currentConversationId = conversationIdRef.current;
+
+            // Debug logging
+            console.log('[sendChatMessage] Sending message with:', {
+                currentConversationId,
+                conversationIdRefValue: conversationIdRef.current,
+                conversationIdState: conversationId,
+                toolMode,
+                searchEnabled,
+            });
+
             // Use streaming API
             for await (const chunk of streamMessage({
                 message: content,
                 user_id: userId,
-                conversation_id: conversationId || undefined,
+                conversation_id: currentConversationId || undefined,
                 model_name: selectedModel,
                 tool_mode: toolMode,
                 use_rag: documentCount > 0,
             })) {
                 // Check if this is metadata object (from 'done' event)
                 if (typeof chunk === 'object' && chunk.conversation_id) {
+                    console.log('[sendChatMessage] Received done event:', {
+                        receivedConversationId: chunk.conversation_id,
+                        currentRefValue: conversationIdRef.current,
+                        willUpdate: !conversationIdRef.current,
+                        toolMetadata: chunk.tool_metadata,
+                    });
+                    
                     // Update conversation ID immediately if not set
-                    if (!conversationId) {
+                    if (!conversationIdRef.current) {
+                        console.log('[sendChatMessage] Setting conversation ID to:', chunk.conversation_id);
                         setConversationId(chunk.conversation_id);
-                        // Also update pending ref just in case logic relies on it elsewhere
-                        pendingConversationId.current = chunk.conversation_id;
+                        conversationIdRef.current = chunk.conversation_id;
                     }
                     // Store tool metadata if present
                     if (chunk.tool_metadata) {
@@ -212,12 +242,6 @@ export function ChatProvider({ children }: ChatProviderProps) {
                 }
             }
 
-            // Set conversation ID after streaming completes
-            if (pendingConversationId.current && !conversationId) {
-                setConversationId(pendingConversationId.current);
-                pendingConversationId.current = null;
-            }
-
             // Always refresh conversations list to update message count in sidebar
             await refreshConversations();
         } catch (err) {
@@ -227,11 +251,12 @@ export function ChatProvider({ children }: ChatProviderProps) {
         } finally {
             setIsLoading(false);
         }
-    }, [conversationId, selectedModel, userId, refreshConversations, searchEnabled, documentCount]);
+    }, [selectedModel, userId, refreshConversations, searchEnabled, documentCount]);
 
     const startNewChat = useCallback(() => {
         setMessages([]);
         setConversationId(null);
+        conversationIdRef.current = null;
         setError(null);
         setDocumentCount(0);
         setLastToolMetadata(null);
@@ -244,6 +269,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
             const conversation = await getConversation(id, userId);
             setMessages(conversation.messages);
             setConversationId(id);
+            conversationIdRef.current = id;
             setSelectedModel(conversation.model_name);
             // Reset tool state and fetch document count for this conversation
             setSearchEnabled(false);

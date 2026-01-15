@@ -96,11 +96,18 @@ class RAGStore:
         self.fs = GridFS(self.db, collection="rag_files")
         self.documents_collection = self.db["rag_documents"]
         self.chunks_collection = self.db["rag_chunks"]
-        self.embeddings = get_embeddings()
+        self._embeddings = None  # Lazy-loaded
         self.settings = settings
         
         # Create indexes for efficient queries
         self._ensure_indexes()
+    
+    @property
+    def embeddings(self):
+        """Lazy-load embeddings to avoid startup failures if Ollama isn't running."""
+        if self._embeddings is None:
+            self._embeddings = get_embeddings()
+        return self._embeddings
     
     def _ensure_indexes(self):
         """Create necessary indexes."""

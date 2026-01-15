@@ -2,7 +2,9 @@
  * API client for T3.chat backend
  */
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+// Hardcoded to localhost for local development
+// Change this to your deployed API URL when deploying
+const API_BASE_URL = 'http://localhost:8000';
 
 // ============================================================================
 // Types
@@ -374,6 +376,18 @@ export async function uploadRagDocument(
     userId: string,
     conversationId?: string
 ): Promise<RagUploadResponse> {
+    const uploadUrl = `${API_BASE_URL}/api/rag/upload`;
+    
+    // Debug logging for RAG upload
+    console.log('[uploadRagDocument] Upload details:', {
+        uploadUrl,
+        apiBaseUrl: API_BASE_URL,
+        fileName: file.name,
+        fileSize: file.size,
+        userId,
+        conversationId: conversationId || '(new conversation)',
+    });
+    
     const formData = new FormData();
     formData.append('file', file);
     formData.append('user_id', userId);
@@ -381,7 +395,7 @@ export async function uploadRagDocument(
         formData.append('conversation_id', conversationId);
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/rag/upload`, {
+    const response = await fetch(uploadUrl, {
         method: 'POST',
         body: formData,
     });

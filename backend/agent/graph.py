@@ -309,17 +309,26 @@ async def stream_chat(
     from config import DEFAULT_MODEL
     from agent.tools import get_tool_context
     
+    # Debug logging
+    print(f"[stream_chat] Called with:")
+    print(f"  - message: {message[:50]}...")
+    print(f"  - conversation_id: {conversation_id}")
+    print(f"  - tool_mode: {tool_mode}")
+    print(f"  - use_rag: {use_rag}")
+    
     # First, load memories
     memory_manager = MemoryManager(user_id)
     memory_context = memory_manager.get_context_memories(query=message, limit=10)
     
     # Load tool context (search and/or RAG)
+    print(f"[stream_chat] Calling get_tool_context with tool_mode={tool_mode}")
     tool_context, tool_metadata = get_tool_context(
         query=message,
         conversation_id=conversation_id,
         tool_mode=tool_mode,
         use_rag=use_rag,
     )
+    print(f"[stream_chat] Got tool_context length: {len(tool_context)}, metadata: {tool_metadata}")
     
     # Create state
     state = ChatState(
