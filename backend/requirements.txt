@@ -27,6 +27,9 @@ numpy
 
 # Search
 tavily-python
+httpx
+beautifulsoup4
+lxml
 
 # Utilities
 python-dotenv

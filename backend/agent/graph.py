@@ -104,11 +104,32 @@ def generate_response(state: ChatState) -> dict:
     if tool_context:
         tool_instructions = """
 
-IMPORTANT: You have been provided with tool results (search and/or document retrieval).
-- Use the information provided to give a specific, grounded answer
-- Cite sources when using search results
-- If the tool results don't contain relevant information, acknowledge this and provide the best answer you can
-- Do NOT give generic responses - always reference the specific data provided"""
+=== CRITICAL: TOOL RESULTS PROVIDED - YOU MUST USE THEM ===
+
+You have been given REAL-TIME search results and/or document content below.
+Your response MUST follow these rules:
+
+1. **USE THE DATA**: Extract specific facts, dates, names, and details from the results.
+2. **CITE SOURCES**: When stating facts from search results, include the source URL.
+   Format: "According to [Source Name](URL), ..."
+3. **BE SPECIFIC**: Include exact dates, times, locations, and details found in the results.
+4. **NO GENERIC RESPONSES**: Do NOT say things like "check the official website" or 
+   "I don't have current information" - THE RESULTS BELOW ARE CURRENT.
+5. **ACKNOWLEDGE LIMITATIONS**: If the results don't contain the answer, say exactly what 
+   information IS available and what is missing.
+
+FORBIDDEN RESPONSES:
+- "I recommend checking [website] for the latest information"
+- "I don't have access to real-time data"
+- "As of my knowledge cutoff..."
+- Generic advice without specific facts from the results
+
+REQUIRED FORMAT:
+- Lead with the direct answer using facts from the results
+- Cite at least one source URL
+- Add relevant context from other results if available
+
+"""
         system_content += tool_instructions + tool_context
     
     # Get the LLM
@@ -181,11 +202,32 @@ async def generate_response_stream(state: ChatState) -> AsyncIterator[str]:
     if tool_context:
         tool_instructions = """
 
-IMPORTANT: You have been provided with tool results (search and/or document retrieval).
-- Use the information provided to give a specific, grounded answer
-- Cite sources when using search results
-- If the tool results don't contain relevant information, acknowledge this and provide the best answer you can
-- Do NOT give generic responses - always reference the specific data provided"""
+=== CRITICAL: TOOL RESULTS PROVIDED - YOU MUST USE THEM ===
+
+You have been given REAL-TIME search results and/or document content below.
+Your response MUST follow these rules:
+
+1. **USE THE DATA**: Extract specific facts, dates, names, and details from the results.
+2. **CITE SOURCES**: When stating facts from search results, include the source URL.
+   Format: "According to [Source Name](URL), ..."
+3. **BE SPECIFIC**: Include exact dates, times, locations, and details found in the results.
+4. **NO GENERIC RESPONSES**: Do NOT say things like "check the official website" or 
+   "I don't have current information" - THE RESULTS BELOW ARE CURRENT.
+5. **ACKNOWLEDGE LIMITATIONS**: If the results don't contain the answer, say exactly what 
+   information IS available and what is missing.
+
+FORBIDDEN RESPONSES:
+- "I recommend checking [website] for the latest information"
+- "I don't have access to real-time data"
+- "As of my knowledge cutoff..."
+- Generic advice without specific facts from the results
+
+REQUIRED FORMAT:
+- Lead with the direct answer using facts from the results
+- Cite at least one source URL
+- Add relevant context from other results if available
+
+"""
         system_content += tool_instructions + tool_context
     
     # Get the LLM with streaming enabled
