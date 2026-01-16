@@ -2,9 +2,13 @@
  * API client for T3.chat backend
  */
 
-// Hardcoded to localhost for local development
-// Change this to your deployed API URL when deploying
-const API_BASE_URL = 'http://localhost:8000';
+// Use environment variable for API URL
+// In development: http://localhost:8000
+// In production: https://api.manimancer.fun
+const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+// Remove trailing slash to prevent double-slash issues (e.g., https://api.example.com//api/chat)
+const API_BASE_URL = RAW_API_URL.replace(/\/+$/, '');
 
 // ============================================================================
 // Types

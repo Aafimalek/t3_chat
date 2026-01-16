@@ -1,0 +1,78 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'  # Only trigger on backend changes
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  EC2_HOST: ${{ secrets.EC2_HOST }}
+  EC2_USER: ubuntu
+
+jobs:
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key.pem
+          chmod 600 ~/.ssh/ec2_key.pem
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy Backend to EC2
+        run: |
+          ssh -i ~/.ssh/ec2_key.pem -o StrictHostKeyChecking=no ${{ env.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
+            set -e
+            echo "=========================================="
+            echo "Starting Backend Deployment"
+            echo "=========================================="
+            
+            cd /home/ubuntu/t3_chat
+            
+            # Pull latest code
+            echo "[1/4] Pulling latest code..."
+            git fetch origin main
+            git reset --hard origin/main
+            
+            # Navigate to backend
+            cd backend
+            
+            # Install/update dependencies
+            echo "[2/4] Installing dependencies..."
+            source $HOME/.local/bin/env 2>/dev/null || true
+            uv sync
+            
+            # Restart the backend service
+            echo "[3/4] Restarting backend service..."
+            sudo systemctl restart t3-backend
+            
+            # Wait for service to start
+            sleep 5
+            
+            # Health check
+            echo "[4/4] Running health check..."
+            if curl -s http://localhost:8000/health | grep -q "healthy"; then
+              echo "Backend deployment successful!"
+            else
+              echo "Health check failed!"
+              sudo systemctl status t3-backend --no-pager
+              exit 1
+            fi
+            
+            echo "=========================================="
+            echo "Backend Deployment Complete!"
+            echo "=========================================="
+          ENDSSH
+
+      - name: Cleanup SSH Key
+        if: always()
+        run: rm -f ~/.ssh/ec2_key.pem
