@@ -3,7 +3,7 @@ name: Deploy Backend to EC2
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'backend/**'  # Only trigger on backend changes
   workflow_dispatch:  # Allow manual trigger
@@ -40,8 +40,8 @@ jobs:
             
             # Pull latest code
             echo "[1/4] Pulling latest code..."
-            git fetch origin main
-            git reset --hard origin/main
+            git fetch origin master
+            git reset --hard origin/master
             
             # Navigate to backend
             cd backend
