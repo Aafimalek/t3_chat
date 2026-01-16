@@ -65,9 +65,10 @@ class Settings(BaseSettings):
     
     # CORS Configuration
     # Comma-separated list of allowed origins, or "*" for all (not recommended with credentials)
+    # Include your Vercel frontend URL here
     cors_origins: str = os.getenv(
         "CORS_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173"
+        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,https://t3chat-indol.vercel.app"
     )
     
     @property

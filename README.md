@@ -6,9 +6,11 @@
   <img src="https://img.shields.io/badge/FastAPI-Latest-009688?style=for-the-badge&logo=fastapi" alt="FastAPI"/>
   <img src="https://img.shields.io/badge/LangGraph-Latest-blue?style=for-the-badge" alt="LangGraph"/>
   <img src="https://img.shields.io/badge/MongoDB-Atlas-47A248?style=for-the-badge&logo=mongodb" alt="MongoDB"/>
+  <img src="https://img.shields.io/badge/AWS_S3-Storage-FF9900?style=for-the-badge&logo=amazons3" alt="AWS S3"/>
   <img src="https://img.shields.io/badge/Groq-LPU-orange?style=for-the-badge" alt="Groq"/>
   <img src="https://img.shields.io/badge/Tavily-Search-purple?style=for-the-badge" alt="Tavily"/>
   <img src="https://img.shields.io/badge/Ollama-Embeddings-green?style=for-the-badge" alt="Ollama"/>
+  <img src="https://img.shields.io/badge/GitHub_Actions-CI/CD-2088FF?style=for-the-badge&logo=githubactions" alt="GitHub Actions"/>
 </p>
 
 A full-stack AI chat application inspired by [T3.chat](https://t3.chat). Built with **Next.js 16** (App Router) and **FastAPI**, featuring:
@@ -24,6 +26,7 @@ A full-stack AI chat application inspired by [T3.chat](https://t3.chat). Built w
 
 - [Key Features](#-key-features)
 - [Architecture Overview](#-architecture-overview)
+- [Deployment Architecture](#-deployment-architecture)
 - [System Design Deep Dive](#-system-design-deep-dive)
 - [Tool System (Search & RAG)](#-tool-system-search--rag)
 - [Technology Stack](#-technology-stack)
@@ -35,7 +38,10 @@ A full-stack AI chat application inspired by [T3.chat](https://t3.chat). Built w
 - [MongoDB Collections](#-mongodb-collections)
 - [Setup & Installation](#-setup--installation)
 - [Environment Variables](#-environment-variables)
+- [Deployment](#-deployment)
+- [CI/CD Pipeline](#-cicd-pipeline)
 - [Development](#-development)
+- [Challenges & Solutions](#-challenges--solutions)
 - [Available Models](#-available-models)
 - [UI Features](#-ui-features)
 
@@ -125,7 +131,7 @@ The application follows a **decoupled client-server architecture** with tool int
 
 ```mermaid
 graph TB
-    subgraph Client["Frontend - Next.js 16"]
+    subgraph Client["Frontend - Next.js 16 (Vercel)"]
         direction TB
         UI["React UI Components"]
         Context["ChatContext Provider"]
@@ -133,7 +139,7 @@ graph TB
         Auth["Clerk Authentication"]
     end
 
-    subgraph Server["Backend - FastAPI"]
+    subgraph Server["Backend - FastAPI (EC2)"]
         direction TB
         Routes["API Routes"]
         
@@ -151,11 +157,13 @@ graph TB
         end
         
         MemMgr["MemoryManager"]
-        RAGStore["RAGStore - GridFS + Chunks"]
+        RAGStore["RAGStore - S3 + MongoDB"]
+        S3Client["S3Client - PDF Storage"]
     end
 
     subgraph External["External Services"]
         MongoDB[("MongoDB Atlas")]
+        S3[("AWS S3")]
         Groq["Groq Cloud API"]
         Tavily["Tavily Search API"]
         Ollama["Ollama Embeddings"]
@@ -172,11 +180,75 @@ graph TB
     SearchTool --> Tavily
     RAGRetriever --> RAGStore
     RAGStore --> Ollama
+    RAGStore --> S3Client
+    S3Client --> S3
     Generate -->|"Streaming"| Groq
     Extract --> MemMgr
     MemMgr --> MongoDB
     RAGStore --> MongoDB
 ```
+
+---
+
+## 🚀 Deployment Architecture
+
+The application is deployed across multiple cloud services for optimal performance and scalability.
+
+```mermaid
+flowchart TB
+    subgraph Internet["Internet"]
+        User["User Browser"]
+    end
+
+    subgraph Vercel["Vercel (Frontend)"]
+        NextJS["Next.js App"]
+        VercelEnv["Environment Variables"]
+    end
+
+    subgraph AWS["AWS Cloud"]
+        subgraph EC2["EC2 Instance"]
+            Nginx["Nginx Reverse Proxy"]
+            FastAPI["FastAPI Backend"]
+            Ollama["Ollama (Embeddings)"]
+            Systemd["systemd Service"]
+        end
+        S3["S3 Bucket (PDF Storage)"]
+        Route53["Route 53 DNS"]
+    end
+
+    subgraph MongoDB["MongoDB Atlas"]
+        Collections["Conversations, Memories, Chunks"]
+    end
+
+    subgraph ExternalAPIs["External APIs"]
+        Groq["Groq Cloud"]
+        Tavily["Tavily Search"]
+        Clerk["Clerk Auth"]
+    end
+
+    User -->|"HTTPS"| Vercel
+    User -->|"HTTPS"| Route53
+    Route53 -->|"api.manimancer.fun"| Nginx
+    NextJS -->|"API Calls"| Nginx
+    Nginx -->|"Proxy Pass :8000"| FastAPI
+    FastAPI --> Ollama
+    FastAPI --> S3
+    FastAPI --> Collections
+    FastAPI --> Groq
+    FastAPI --> Tavily
+    NextJS --> Clerk
+```
+
+### Deployment Summary
+
+| Component | Platform | URL |
+|-----------|----------|-----|
+| **Frontend** | Vercel | Auto-deployed on push |
+| **Backend** | AWS EC2 | `https://api.manimancer.fun` |
+| **Database** | MongoDB Atlas | Cloud-hosted |
+| **File Storage** | AWS S3 | PDF documents |
+| **DNS** | AWS Route 53 | Domain management |
+| **SSL** | Let's Encrypt | Auto-renewed via Certbot |
 
 ---
 
@@ -417,8 +489,8 @@ flowchart TB
         Extract["pdfplumber.extract_text()"]
         Chunk["Custom chunking with sentence boundaries"]
         Embed["OllamaEmbeddings - nomic-embed-text"]
-        StoreChunks["Store chunks + embeddings"]
-        StoreFile["Store PDF in GridFS"]
+        StoreChunks["Store chunks + embeddings in MongoDB"]
+        StoreFile["Store PDF in AWS S3"]
     end
 
     subgraph Query["Query Flow"]
@@ -431,10 +503,10 @@ flowchart TB
         Format["Format RAG context"]
     end
 
-    subgraph Storage["MongoDB Collections"]
-        RagDocs["rag_documents"]
-        RagChunks["rag_chunks"]
-        RagFiles["rag_files GridFS"]
+    subgraph Storage["Storage Layer"]
+        RagDocs["rag_documents (MongoDB)"]
+        RagChunks["rag_chunks (MongoDB)"]
+        S3Bucket["AWS S3 Bucket (PDFs)"]
     end
 
     PDF --> Extract
@@ -443,7 +515,7 @@ flowchart TB
     Embed --> StoreChunks
     PDF --> StoreFile
     StoreChunks --> RagChunks
-    StoreFile --> RagFiles
+    StoreFile --> S3Bucket
 
     UserQuery --> QueryEmbed
     QueryEmbed --> FetchChunks
@@ -457,19 +529,20 @@ flowchart TB
 ### RAG Storage Schema
 
 ```python
-# rag_documents collection - Document metadata
+# rag_documents collection - Document metadata (MongoDB)
 {
     "_id": "document_uuid",           # Unique document ID
     "filename": "report.pdf",         # Original filename
     "user_id": "clerk_user_id",       # Owner
     "conversation_id": "conv_uuid",   # Scoped to conversation
-    "file_id": ObjectId("..."),       # GridFS reference
+    "s3_key": "documents/user_id/doc_uuid/report.pdf",  # S3 object key
+    "s3_url": "https://bucket.s3.amazonaws.com/...",    # S3 presigned URL
     "chunk_count": 15,                # Number of chunks
     "text_length": 12500,             # Total characters
     "created_at": datetime            # Upload timestamp
 }
 
-# rag_chunks collection - Text chunks with embeddings
+# rag_chunks collection - Text chunks with embeddings (MongoDB)
 {
     "_id": "doc_uuid_chunk_0",         # Composite ID
     "document_id": "doc_uuid",         # Parent document
@@ -480,6 +553,11 @@ flowchart TB
     "embedding": [0.123, -0.456, ...], # 768-dim nomic-embed-text vector
     "created_at": datetime             # Creation timestamp
 }
+
+# PDF files stored in AWS S3:
+# - Bucket: configured via S3_BUCKET_NAME env variable
+# - Key format: documents/{user_id}/{document_id}/{filename}
+# - Presigned URLs generated for secure download access
 
 # Retrieval uses cosine similarity:
 # score = dot(query_embedding, chunk_embedding) / (||query|| * ||chunk||)
@@ -510,29 +588,34 @@ flowchart TB
 | Technology | Version | Purpose |
 |------------|---------|---------|
 | **FastAPI** | Latest | Async web framework |
-| **Python** | 3.11+ | Runtime |
+| **Python** | 3.13+ | Runtime |
 | **LangGraph** | Latest | Agent workflow orchestration |
 | **LangChain** | Latest | LLM abstractions |
 | **langchain-groq** | Latest | Groq LLM integration |
 | **langchain-ollama** | Latest | Ollama embeddings |
 | **Motor** | Latest | Async MongoDB driver |
 | **PyMongo** | Latest | Sync MongoDB driver |
+| **boto3** | Latest | AWS S3 SDK for file storage |
 | **httpx** | Latest | HTTP client for Tavily |
 | **pdfplumber** | Latest | PDF text extraction |
 | **beautifulsoup4** | Latest | HTML parsing for articles |
 | **tavily-python** | Latest | Tavily search client |
 | **SSE-Starlette** | Latest | Server-Sent Events |
 | **pydantic-settings** | Latest | Environment management |
+| **uv** | Latest | Fast Python package manager |
 
 ### External Services
 
 | Service | Purpose |
 |---------|---------|
 | **MongoDB Atlas** | Database - conversations, memories, RAG vectors |
+| **AWS S3** | Cloud storage for PDF documents |
+| **AWS EC2** | Backend server hosting |
 | **Groq Cloud** | LLM inference with LPU acceleration |
 | **Tavily** | Web search API |
-| **Ollama** | Local embeddings (nomic-embed-text) |
+| **Ollama** | Embeddings model (nomic-embed-text) |
 | **Clerk** | User authentication |
+| **Vercel** | Frontend hosting with auto-deployment |
 
 ---
 
@@ -541,6 +624,12 @@ flowchart TB
 ```
 t3_chat/
 ├── 📄 README.md                    # This documentation file
+├── 📄 deployment_guide.md          # EC2 deployment instructions
+│
+├── 📁 .github/                     # GitHub Actions CI/CD
+│   └── 📁 workflows/
+│       ├── 📄 deploy.yml           # Auto-deploy backend to EC2
+│       └── 📄 test.yml             # Linting and tests
 │
 ├── 📁 backend/                     # FastAPI Backend (Python)
 │   ├── 📄 main.py                  # FastAPI app, CORS, routers
@@ -555,10 +644,14 @@ t3_chat/
 │   │   ├── 📄 prompts.py           # SYSTEM_PROMPT, MEMORY_EXTRACTION_PROMPT
 │   │   └── 📄 tools.py             # SearchTool, ReaderTool, get_tool_context()
 │   │
-│   ├── 📁 rag/                     # RAG Subsystem (NEW)
+│   ├── 📁 rag/                     # RAG Subsystem
 │   │   ├── 📄 __init__.py          # Module exports
 │   │   ├── 📄 store.py             # RAGStore - PDF ingestion, chunking, embeddings
 │   │   └── 📄 retriever.py         # RAGRetriever - similarity search
+│   │
+│   ├── 📁 storage/                 # File Storage (AWS S3)
+│   │   ├── 📄 __init__.py          # Module exports
+│   │   └── 📄 s3_client.py         # S3Client - upload, download, presigned URLs
 │   │
 │   ├── 📁 memory/                  # Memory Subsystem
 │   │   ├── 📄 manager.py           # MemoryManager with CRUD + deduplication
@@ -868,10 +961,10 @@ flowchart TB
 | `user_settings` | User preferences | `_id, nickname, occupation, about` |
 | `checkpoints` | LangGraph state | `thread_id, state` |
 | `checkpoint_writes` | LangGraph writes | `thread_id, data` |
-| `rag_documents` | PDF metadata | `_id, filename, conversation_id, chunk_count` |
+| `rag_documents` | PDF metadata | `_id, filename, conversation_id, s3_key, chunk_count` |
 | `rag_chunks` | Text chunks + embeddings | `document_id, text, embedding[]` |
-| `rag_files.files` | GridFS file metadata | `_id, filename, document_id` |
-| `rag_files.chunks` | GridFS binary data | `files_id, data` |
+
+> **Note:** PDF files are stored in AWS S3 (not MongoDB). Only metadata and embeddings are stored in MongoDB for efficient querying.
 
 ---
 
@@ -940,29 +1033,43 @@ DATABASE_NAME=t3_chat
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_EMBED_MODEL=nomic-embed-text
 
+# AWS S3 Configuration (for PDF storage)
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=your_bucket_name
+
 # RAG Configuration
 RAG_CHUNK_SIZE=1000
 RAG_CHUNK_OVERLAP=200
 RAG_TOP_K=5
 
-# CORS (comma-separated origins)
-CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+# CORS (comma-separated origins - include your frontend URL)
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,https://your-app.vercel.app
 
 # Optional - LangSmith Tracing
 LANGSMITH_API_KEY=
 LANGSMITH_TRACING=false
 ```
 
-### Frontend `.env.local`
+### Frontend `.env.local` (Development)
 
 ```env
-# Backend API URL
+# Backend API URL (local development)
 NEXT_PUBLIC_API_URL=http://localhost:8000
 
 # Clerk Authentication
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
 ```
+
+### Vercel Environment Variables (Production)
+
+| Variable | Value |
+|----------|-------|
+| `NEXT_PUBLIC_API_URL` | `https://api.manimancer.fun` |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Your Clerk publishable key |
+| `CLERK_SECRET_KEY` | Your Clerk secret key |
 
 ---
 
@@ -987,6 +1094,232 @@ npm run dev
 ```
 
 - **App**: http://localhost:3000
+
+---
+
+## 🚢 Deployment
+
+### Backend Deployment (AWS EC2)
+
+1. **Launch EC2 Instance** (Ubuntu 22.04, t2.micro or larger)
+2. **Install Dependencies**:
+   ```bash
+   # Install Python 3.13 and uv
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   
+   # Install Nginx
+   sudo apt install nginx certbot python3-certbot-nginx
+   
+   # Install Ollama
+   curl -fsSL https://ollama.com/install.sh | sh
+   ollama pull nomic-embed-text
+   ```
+
+3. **Clone and Setup**:
+   ```bash
+   git clone https://github.com/your-repo/t3_chat.git
+   cd t3_chat/backend
+   uv sync
+   cp .env.example .env  # Edit with your values
+   ```
+
+4. **Configure systemd Service**:
+   ```bash
+   # /etc/systemd/system/t3-backend.service
+   [Unit]
+   Description=T3 Chat Backend
+   After=network.target
+
+   [Service]
+   User=ubuntu
+   WorkingDirectory=/home/ubuntu/t3_chat/backend
+   ExecStart=/home/ubuntu/.local/bin/uv run uvicorn main:app --host 0.0.0.0 --port 8000
+   Restart=always
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+5. **Configure Nginx**:
+   ```nginx
+   server {
+       server_name api.yourdomain.com;
+       
+       location / {
+           proxy_pass http://localhost:8000;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection 'upgrade';
+           proxy_set_header Host $host;
+           proxy_cache_bypass $http_upgrade;
+       }
+   }
+   ```
+
+6. **Setup SSL**:
+   ```bash
+   sudo certbot --nginx -d api.yourdomain.com
+   ```
+
+### Frontend Deployment (Vercel)
+
+1. Connect your GitHub repository to Vercel
+2. Set environment variables in Vercel dashboard
+3. Vercel auto-deploys on every push to `master`
+
+---
+
+## 🔄 CI/CD Pipeline
+
+Automated deployment using GitHub Actions.
+
+```mermaid
+flowchart LR
+    subgraph GitHub["GitHub Repository"]
+        Push["Push to master"]
+        Actions["GitHub Actions"]
+    end
+
+    subgraph Workflows["Workflows"]
+        Test["test.yml - Linting"]
+        Deploy["deploy.yml - Deploy"]
+    end
+
+    subgraph EC2["AWS EC2"]
+        SSH["SSH Connection"]
+        Pull["Git Pull"]
+        Install["uv sync"]
+        Restart["Restart Service"]
+        Health["Health Check"]
+    end
+
+    subgraph Vercel["Vercel"]
+        VercelDeploy["Auto Deploy Frontend"]
+    end
+
+    Push --> Actions
+    Actions --> Test
+    Actions --> Deploy
+    Deploy --> SSH
+    SSH --> Pull
+    Pull --> Install
+    Install --> Restart
+    Restart --> Health
+    Push --> VercelDeploy
+```
+
+### Workflow Triggers
+
+| Change | Backend Deploys | Frontend Deploys |
+|--------|-----------------|------------------|
+| `backend/**` files | Yes (GitHub Actions) | No |
+| `frontend/**` files | No | Yes (Vercel auto) |
+| Other files | No | No |
+
+### GitHub Secrets Required
+
+| Secret | Description |
+|--------|-------------|
+| `EC2_HOST` | EC2 public IP address |
+| `EC2_SSH_KEY` | SSH private key for EC2 access |
+
+---
+
+## 🧗 Challenges & Solutions
+
+### Challenge 1: CORS Errors with Vercel Frontend
+
+**Problem:** Frontend hosted on Vercel (`https://t3chat-indol.vercel.app`) was receiving `400 Bad Request` on OPTIONS preflight requests.
+
+**Root Cause:** The backend CORS configuration didn't include the Vercel production URL.
+
+**Solution:**
+1. Updated `backend/config.py` to include Vercel URL in default CORS origins
+2. Made CORS configurable via `CORS_ORIGINS` environment variable
+3. Added the production URL to EC2's `.env` file
+
+```python
+# backend/config.py
+cors_origins: str = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:3000,...,https://t3chat-indol.vercel.app"
+)
+```
+
+---
+
+### Challenge 2: MongoDB GridFS to AWS S3 Migration
+
+**Problem:** Storing PDF files directly in MongoDB (GridFS) is not ideal for:
+- Cost efficiency
+- Scalability
+- Binary file handling
+
+**Solution:** Migrated file storage to AWS S3 while keeping metadata and embeddings in MongoDB.
+
+```mermaid
+flowchart LR
+    subgraph Before["Before (GridFS)"]
+        PDF1["PDF"] --> MongoDB1[("MongoDB GridFS")]
+        Chunks1["Chunks"] --> MongoDB1
+    end
+
+    subgraph After["After (S3 + MongoDB)"]
+        PDF2["PDF"] --> S3[("AWS S3")]
+        Chunks2["Chunks + Embeddings"] --> MongoDB2[("MongoDB")]
+        Metadata["Metadata + S3 Key"] --> MongoDB2
+    end
+```
+
+**Implementation:**
+1. Created `backend/storage/s3_client.py` with upload, download, and presigned URL methods
+2. Updated `backend/rag/store.py` to use S3 for file storage
+3. Added `boto3` dependency
+4. Document metadata now stores `s3_key` instead of `file_id`
+
+---
+
+### Challenge 3: EC2 Disk Space Full During Ollama Installation
+
+**Problem:** EC2 instance (8GB root volume) ran out of disk space when installing Ollama, which requires ~5GB.
+
+**Symptoms:**
+- `tar: No space left on device`
+- Partial Ollama installation consuming space
+- System unable to write files
+
+**Solution:**
+1. Removed partial Ollama installation: `sudo rm -rf /usr/local/lib/ollama`
+2. Cleaned system caches: `sudo apt-get clean && sudo journalctl --vacuum-time=1d`
+3. Expanded EBS volume from 8GB to 20GB in AWS Console
+4. Extended filesystem: `sudo growpart /dev/nvme0n1 1 && sudo resize2fs /dev/nvme0n1p1`
+5. Retried Ollama installation successfully
+
+---
+
+### Challenge 4: Double-Slash in API URLs
+
+**Problem:** If `NEXT_PUBLIC_API_URL` was set with a trailing slash, API calls would have double slashes (e.g., `https://api.example.com//api/chat`).
+
+**Solution:** Added trailing slash removal in the frontend API client:
+
+```typescript
+// frontend/src/lib/api.ts
+const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = RAW_API_URL.replace(/\/+$/, ''); // Remove trailing slashes
+```
+
+---
+
+### Challenge 5: SSH Key Configuration for GitHub Actions
+
+**Problem:** GitHub Actions couldn't SSH into EC2 for automated deployment.
+
+**Solution:**
+1. Generated dedicated SSH key pair on EC2: `ssh-keygen -t ed25519 -C "github-actions-deploy"`
+2. Added public key to EC2's `~/.ssh/authorized_keys`
+3. Added private key to GitHub Secrets as `EC2_SSH_KEY`
+4. Configured workflow to setup SSH key and add host to known_hosts
 
 ---
 
@@ -1035,5 +1368,5 @@ This project is for educational purposes.
 ---
 
 <p align="center">
-  Built with Next.js 16, FastAPI, LangGraph, Groq, Tavily, and Ollama
+  Built with Next.js 16, FastAPI, LangGraph, Groq, Tavily, Ollama, AWS S3, and GitHub Actions
 </p>
