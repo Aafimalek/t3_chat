@@ -50,6 +50,19 @@ class Settings(BaseSettings):
     rag_chunk_overlap: int = int(os.getenv("RAG_CHUNK_OVERLAP", "200"))
     rag_top_k: int = int(os.getenv("RAG_TOP_K", "5"))
     
+    # AWS S3 Configuration (for file storage)
+    aws_access_key_id: str = os.getenv("AWS_ACCESS_KEY_ID", "")
+    aws_secret_access_key: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+    aws_region: str = os.getenv("AWS_REGION", "us-east-1")
+    s3_bucket_name: str = os.getenv("S3_BUCKET_NAME", "")
+    # Optional: For S3-compatible services like MinIO, DigitalOcean Spaces, etc.
+    s3_endpoint_url: str = os.getenv("S3_ENDPOINT_URL", "")
+    
+    @property
+    def s3_configured(self) -> bool:
+        """Check if S3 is properly configured."""
+        return bool(self.aws_access_key_id and self.aws_secret_access_key and self.s3_bucket_name)
+    
     # CORS Configuration
     # Comma-separated list of allowed origins, or "*" for all (not recommended with credentials)
     cors_origins: str = os.getenv(

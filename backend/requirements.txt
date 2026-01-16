@@ -25,6 +25,9 @@ langgraph-store-mongodb
 pdfplumber
 numpy
 
+# AWS S3 Storage
+boto3
+
 # Search
 tavily-python
 httpx

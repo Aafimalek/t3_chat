@@ -1,16 +1,15 @@
 """
-RAG Document Store - PDF ingestion, chunking, embeddings, and MongoDB storage.
-Stores PDFs and vector embeddings scoped to conversations.
+RAG Document Store - PDF ingestion, chunking, embeddings, and storage.
+Stores PDFs in S3 and vector embeddings in MongoDB scoped to conversations.
 """
 
 import io
 import uuid
 from datetime import datetime
-from typing import BinaryIO
+from typing import BinaryIO, Optional
 
 import pdfplumber
 import numpy as np
-from gridfs import GridFS
 from langchain_ollama import OllamaEmbeddings
 
 from config import get_settings
@@ -84,7 +83,7 @@ class RAGStore:
     """
     Manages RAG document storage and retrieval.
     
-    - Stores PDFs in GridFS
+    - Stores PDFs in AWS S3
     - Stores document metadata in rag_documents collection
     - Stores chunk embeddings in rag_chunks collection
     """
@@ -93,10 +92,10 @@ class RAGStore:
         settings = get_settings()
         self.client = get_sync_client()
         self.db = self.client[settings.database_name]
-        self.fs = GridFS(self.db, collection="rag_files")
         self.documents_collection = self.db["rag_documents"]
         self.chunks_collection = self.db["rag_chunks"]
         self._embeddings = None  # Lazy-loaded
+        self._s3_client = None  # Lazy-loaded
         self.settings = settings
         
         # Create indexes for efficient queries
@@ -108,6 +107,14 @@ class RAGStore:
         if self._embeddings is None:
             self._embeddings = get_embeddings()
         return self._embeddings
+    
+    @property
+    def s3_client(self):
+        """Lazy-load S3 client to avoid startup failures if S3 isn't configured."""
+        if self._s3_client is None:
+            from storage.s3_client import get_s3_client
+            self._s3_client = get_s3_client()
+        return self._s3_client
     
     def _ensure_indexes(self):
         """Create necessary indexes."""
@@ -149,13 +156,17 @@ class RAGStore:
         if not text.strip():
             raise ValueError("Could not extract text from PDF")
         
-        # Store PDF in GridFS
-        file_id = self.fs.put(
-            file_content,
+        # Upload PDF to S3
+        s3_result = self.s3_client.upload_file(
+            file_content=file_content,
             filename=filename,
-            document_id=document_id,
             user_id=user_id,
             conversation_id=conversation_id,
+            document_id=document_id,
+            content_type="application/pdf",
+            metadata={
+                "text_length": str(len(text)),
+            }
         )
         
         # Chunk the text
@@ -169,13 +180,14 @@ class RAGStore:
         chunk_texts = [c["text"] for c in chunks]
         embeddings = self.embeddings.embed_documents(chunk_texts)
         
-        # Store document metadata
+        # Store document metadata in MongoDB
         doc_metadata = {
             "_id": document_id,
             "filename": filename,
             "user_id": user_id,
             "conversation_id": conversation_id,
-            "file_id": file_id,
+            "s3_key": s3_result["s3_key"],  # S3 key for file retrieval
+            "s3_url": s3_result["s3_url"],  # Direct S3 URL
             "chunk_count": len(chunks),
             "text_length": len(text),
             "created_at": datetime.utcnow(),
@@ -199,6 +211,8 @@ class RAGStore:
         if chunk_docs:
             self.chunks_collection.insert_many(chunk_docs)
         
+        print(f"[RAGStore] Stored document {document_id} with {len(chunks)} chunks in S3 and MongoDB")
+        
         return {
             "document_id": document_id,
             "conversation_id": conversation_id,
@@ -221,6 +235,7 @@ class RAGStore:
                 "chunk_count": doc["chunk_count"],
                 "text_length": doc["text_length"],
                 "created_at": doc["created_at"].isoformat(),
+                "s3_key": doc.get("s3_key"),  # Include S3 key if available
             }
             for doc in cursor
         ]
@@ -236,15 +251,21 @@ class RAGStore:
         if not doc:
             return False
         
-        # Delete from GridFS
-        if doc.get("file_id"):
-            self.fs.delete(doc["file_id"])
+        # Delete from S3 (new approach)
+        if doc.get("s3_key"):
+            try:
+                self.s3_client.delete_file(doc["s3_key"])
+            except Exception as e:
+                print(f"[RAGStore] Warning: Failed to delete file from S3: {e}")
+                # Continue with MongoDB cleanup even if S3 delete fails
         
-        # Delete chunks
+        # Delete chunks from MongoDB
         self.chunks_collection.delete_many({"document_id": document_id})
         
-        # Delete document metadata
+        # Delete document metadata from MongoDB
         self.documents_collection.delete_one({"_id": document_id})
+        
+        print(f"[RAGStore] Deleted document {document_id}")
         
         return True
     
@@ -253,6 +274,36 @@ class RAGStore:
         return self.documents_collection.count_documents(
             {"conversation_id": conversation_id}
         ) > 0
+    
+    def get_document_download_url(
+        self,
+        document_id: str,
+        user_id: str,
+        expiration: int = 3600,
+    ) -> Optional[str]:
+        """
+        Get a presigned URL for downloading a document.
+        
+        Args:
+            document_id: Document identifier
+            user_id: User identifier (for ownership verification)
+            expiration: URL expiration time in seconds
+            
+        Returns:
+            Presigned URL or None if document not found
+        """
+        doc = self.documents_collection.find_one({
+            "_id": document_id,
+            "user_id": user_id,
+        })
+        
+        if not doc or not doc.get("s3_key"):
+            return None
+        
+        return self.s3_client.get_presigned_url(
+            s3_key=doc["s3_key"],
+            expiration=expiration,
+        )
 
 
 # Singleton instance

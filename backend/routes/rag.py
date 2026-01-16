@@ -53,6 +53,7 @@ class DocumentInfo(BaseModel):
     chunk_count: int
     text_length: int
     created_at: str
+    s3_key: str | None = None  # S3 storage key (if available)
 
 
 class DocumentListResponse(BaseModel):
@@ -76,9 +77,9 @@ async def upload_document(
     Upload a PDF document for RAG.
     
     The document will be:
-    - Stored in MongoDB (GridFS)
+    - Stored in AWS S3 for file storage
     - Text extracted and chunked
-    - Embeddings generated and stored
+    - Embeddings generated and stored in MongoDB
     
     If no conversation_id is provided, a new one will be created.
     """
@@ -225,4 +226,44 @@ async def get_document_count(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get document count: {str(e)}"
+        )
+
+
+@router.get("/documents/{document_id}/download")
+async def get_document_download_url(
+    document_id: str,
+    user_id: str = Query(..., description="User identifier"),
+    expiration: int = Query(default=3600, description="URL expiration time in seconds"),
+):
+    """
+    Get a presigned URL for downloading a document from S3.
+    
+    The URL is temporary and expires after the specified time (default: 1 hour).
+    """
+    try:
+        store = get_rag_store()
+        download_url = store.get_document_download_url(
+            document_id=document_id,
+            user_id=user_id,
+            expiration=expiration,
+        )
+        
+        if not download_url:
+            raise HTTPException(
+                status_code=404,
+                detail="Document not found or access denied"
+            )
+        
+        return {
+            "document_id": document_id,
+            "download_url": download_url,
+            "expires_in": expiration,
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get download URL: {str(e)}"
         )
