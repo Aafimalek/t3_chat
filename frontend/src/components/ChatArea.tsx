@@ -166,13 +166,13 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
             <header className="absolute top-0 left-0 right-0 p-4 flex items-center justify-between z-10">
                 <div className="flex items-center gap-2">
                     {!isSidebarOpen && (
-                        <Button variant="ghost" size="icon" onClick={toggleSidebar} className="text-muted-foreground hover:text-foreground hover:scale-105 transition-transform">
+                        <Button variant="ghost" size="icon" onClick={toggleSidebar} className="text-muted-foreground hover:text-foreground hover:scale-110 boring:hover:scale-100 transition-all duration-200 boring:transition-none">
                             <PanelLeftOpen size={20} />
                         </Button>
                     )}
                 </div>
                 <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 bg-background/60 backdrop-blur-md px-3 py-1.5 border border-border/30 shadow-lg shadow-black/5 dark:shadow-black/20">
+                    <div className="flex items-center gap-2 bg-background/60 backdrop-blur-md px-3 py-1.5 border border-border/30 shadow-lg shadow-black/5 dark:shadow-black/20 transition-all duration-200 boring:transition-none hover:shadow-xl boring:hover:shadow-none hover:scale-105 boring:hover:scale-100">
                         <span className="text-xs font-medium text-muted-foreground mr-1">Theme</span>
                         <ThemeToggle />
                     </div>
@@ -189,20 +189,20 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
 
                         {/* Quick Actions */}
                         <div className="flex flex-wrap items-center justify-center gap-3">
-                            <Button variant="outline" className="gap-2 border-border/30 bg-background/60 backdrop-blur-md shadow-lg shadow-purple-500/10 hover:shadow-purple-500/20 hover:bg-muted/80 hover:scale-105 transition-all duration-200">
-                                <Sparkles size={16} className="text-purple-500" />
+                            <Button variant="outline" className="gap-2 border-border/30 bg-background/60 backdrop-blur-md shadow-lg shadow-purple-500/10 boring:shadow-none hover:shadow-purple-500/30 boring:hover:shadow-none hover:bg-muted/80 hover:scale-110 boring:hover:scale-100 transition-all duration-200 boring:transition-none">
+                                <Sparkles size={16} className="text-purple-500 boring:text-muted-foreground" />
                                 Create
                             </Button>
-                            <Button variant="outline" className="gap-2 border-border/30 bg-background/60 backdrop-blur-md shadow-lg shadow-blue-500/10 hover:shadow-blue-500/20 hover:bg-muted/80 hover:scale-105 transition-all duration-200">
-                                <Globe size={16} className="text-blue-500" />
+                            <Button variant="outline" className="gap-2 border-border/30 bg-background/60 backdrop-blur-md shadow-lg shadow-blue-500/10 boring:shadow-none hover:shadow-blue-500/30 boring:hover:shadow-none hover:bg-muted/80 hover:scale-110 boring:hover:scale-100 transition-all duration-200 boring:transition-none">
+                                <Globe size={16} className="text-blue-500 boring:text-muted-foreground" />
                                 Explore
                             </Button>
-                            <Button variant="outline" className="gap-2 border-border/30 bg-background/60 backdrop-blur-md shadow-lg shadow-green-500/10 hover:shadow-green-500/20 hover:bg-muted/80 hover:scale-105 transition-all duration-200">
-                                <Code size={16} className="text-green-500" />
+                            <Button variant="outline" className="gap-2 border-border/30 bg-background/60 backdrop-blur-md shadow-lg shadow-green-500/10 boring:shadow-none hover:shadow-green-500/30 boring:hover:shadow-none hover:bg-muted/80 hover:scale-110 boring:hover:scale-100 transition-all duration-200 boring:transition-none">
+                                <Code size={16} className="text-green-500 boring:text-muted-foreground" />
                                 Code
                             </Button>
-                            <Button variant="outline" className="gap-2 border-border/30 bg-background/60 backdrop-blur-md shadow-lg shadow-orange-500/10 hover:shadow-orange-500/20 hover:bg-muted/80 hover:scale-105 transition-all duration-200">
-                                <BookOpen size={16} className="text-orange-500" />
+                            <Button variant="outline" className="gap-2 border-border/30 bg-background/60 backdrop-blur-md shadow-lg shadow-orange-500/10 boring:shadow-none hover:shadow-orange-500/30 boring:hover:shadow-none hover:bg-muted/80 hover:scale-110 boring:hover:scale-100 transition-all duration-200 boring:transition-none">
+                                <BookOpen size={16} className="text-orange-500 boring:text-muted-foreground" />
                                 Learn
                             </Button>
                         </div>
@@ -215,52 +215,52 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
                             onScroll={handleScroll}
                         >
                             <div className="flex flex-col gap-6 py-8 pt-16 px-4">
-{messages.map((message, index) => (
-                                                    <div key={index}>
-                                                        {/* Show tool indicator for assistant messages */}
-                                                        {message.role === 'assistant' && index === messages.length - 1 && lastToolMetadata && (lastToolMetadata.search_used || lastToolMetadata.rag_used) && (
-                                                            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2 animate-in fade-in duration-300">
-                                                                {lastToolMetadata.search_used && (
-                                                                    <span className="flex items-center gap-1 bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded">
-                                                                        <Search size={12} />
-                                                                        Web search used
-                                                                    </span>
-                                                                )}
-                                                                {lastToolMetadata.rag_used && (
-                                                                    <span className="flex items-center gap-1 bg-green-500/10 text-green-500 px-2 py-0.5 rounded">
-                                                                        <Paperclip size={12} />
-                                                                        {lastToolMetadata.rag_chunks} doc chunk(s) used
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                        <div
-                                                            className={cn(
-                                                                "flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300",
-                                                                message.role === 'user' ? 'justify-end' : 'justify-start'
-                                                            )}
-                                                        >
-                                                            <div
-                                                                className={cn(
-                                                                    "max-w-[85%] px-4 py-3",
-                                                                    message.role === 'user'
-                                                                        ? 'bg-pink-600 text-white'
-                                                                        : 'bg-muted/50 text-foreground border border-border/50'
-                                                                )}
-                                                            >
-                                                                {message.role === 'user' ? (
-                                                                    <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                                                                        {message.content}
-                                                                    </p>
-                                                                ) : (
-                                                                    <MarkdownRenderer
-                                                                        content={message.content}
-                                                                    />
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                {messages.map((message, index) => (
+                                    <div key={index}>
+                                        {/* Show tool indicator for assistant messages */}
+                                        {message.role === 'assistant' && index === messages.length - 1 && lastToolMetadata && (lastToolMetadata.search_used || lastToolMetadata.rag_used) && (
+                                            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2 animate-in fade-in duration-300">
+                                                {lastToolMetadata.search_used && (
+                                                    <span className="flex items-center gap-1 bg-blue-500/10 text-blue-500 px-2 py-0.5">
+                                                        <Search size={12} />
+                                                        Web search used
+                                                    </span>
+                                                )}
+                                                {lastToolMetadata.rag_used && (
+                                                    <span className="flex items-center gap-1 bg-green-500/10 text-green-500 px-2 py-0.5">
+                                                        <Paperclip size={12} />
+                                                        {lastToolMetadata.rag_chunks} doc chunk(s) used
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+                                        <div
+                                            className={cn(
+                                                "flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300",
+                                                message.role === 'user' ? 'justify-end' : 'justify-start'
+                                            )}
+                                        >
+                                            <div
+                                                className={cn(
+                                                    "max-w-[85%] px-4 py-3",
+                                                    message.role === 'user'
+                                                        ? 'bg-pink-600 text-white'
+                                                        : 'bg-muted/50 text-foreground border border-border/50'
+                                                )}
+                                            >
+                                                {message.role === 'user' ? (
+                                                    <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                                                        {message.content}
+                                                    </p>
+                                                ) : (
+                                                    <MarkdownRenderer
+                                                        content={message.content}
+                                                    />
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
 
                                 {isLoading && (
                                     <div className="flex gap-4 animate-in fade-in duration-300">
@@ -286,7 +286,7 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
                         {showScrollButton && (
                             <Button
                                 size="icon"
-                                className="absolute bottom-4 right-8 rounded-full h-8 w-8 bg-background/80 backdrop-blur-md border border-border shadow-lg animate-in fade-in zoom-in duration-200 hover:bg-muted"
+                                className="absolute bottom-4 right-8 h-8 w-8 bg-background/80 backdrop-blur-md border border-border shadow-lg animate-in fade-in zoom-in duration-200 hover:bg-muted hover:scale-110 boring:hover:scale-100 transition-all boring:transition-none"
                                 onClick={() => scrollToBottom(false)}
                             >
                                 <ArrowDown size={16} />
@@ -350,10 +350,10 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
                                     variant="ghost"
                                     size="icon"
                                     className={cn(
-                                        "h-8 w-8 transition-colors",
+                                        "h-8 w-8 transition-all duration-200 boring:transition-none",
                                         searchEnabled
-                                            ? "bg-blue-500/20 text-blue-500 hover:bg-blue-500/30"
-                                            : "text-muted-foreground hover:bg-background/80"
+                                            ? "bg-blue-500/20 boring:bg-muted text-blue-500 boring:text-muted-foreground hover:bg-blue-500/30 boring:hover:bg-muted hover:scale-110 boring:hover:scale-100"
+                                            : "text-muted-foreground hover:bg-background/80 hover:scale-110 boring:hover:scale-100"
                                     )}
                                     onClick={handleSearchToggle}
                                     title={searchEnabled ? "Search enabled (click to disable)" : "Enable web search"}
@@ -374,10 +374,10 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
                                         variant="ghost"
                                         size="icon"
                                         className={cn(
-                                            "h-8 w-8 transition-colors",
+                                            "h-8 w-8 transition-all duration-200 boring:transition-none",
                                             documentCount > 0
-                                                ? "text-green-500 hover:bg-green-500/20"
-                                                : "text-muted-foreground hover:bg-background/80"
+                                                ? "text-green-500 boring:text-muted-foreground hover:bg-green-500/20 boring:hover:bg-muted hover:scale-110 boring:hover:scale-100"
+                                                : "text-muted-foreground hover:bg-background/80 hover:scale-110 boring:hover:scale-100"
                                         )}
                                         onClick={() => fileInputRef.current?.click()}
                                         disabled={isUploading}
@@ -390,7 +390,7 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
                                         )}
                                     </Button>
                                     {documentCount > 0 && (
-                                        <span className="absolute -top-1 -right-1 h-4 w-4 text-[10px] font-bold bg-green-500 text-white rounded-full flex items-center justify-center">
+                                        <span className="absolute -top-1 -right-1 h-4 w-4 text-[10px] font-bold bg-green-500 text-white flex items-center justify-center">
                                             {documentCount}
                                         </span>
                                     )}
@@ -398,7 +398,7 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
                             </div>
                             <Button
                                 size="icon"
-                                className="h-8 w-8 bg-pink-600 hover:bg-pink-700 text-white shadow-md disabled:opacity-50"
+                                className="h-8 w-8 bg-teal-600 dark:bg-pink-600 boring:bg-neutral-600 hover:bg-teal-700 dark:hover:bg-pink-700 boring:hover:bg-neutral-700 text-white shadow-md disabled:opacity-50 hover:scale-110 boring:hover:scale-100 hover:shadow-lg boring:hover:shadow-none transition-all duration-200"
                                 onClick={handleSend}
                                 disabled={isLoading || !inputValue.trim() || !isAuthenticated}
                                 title={!isAuthenticated ? "Sign in to send messages" : "Send message"}

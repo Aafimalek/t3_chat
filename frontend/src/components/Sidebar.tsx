@@ -86,20 +86,20 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
                 <div className="flex flex-col gap-2 p-4">
                     <div className="flex items-center justify-between">
                         <h1 className="text-xl font-bold font-sans tracking-tight text-sidebar-foreground">
-                            T3.chat
+                            T3_chat
                         </h1>
                         <Button
                             variant="ghost"
                             size="icon"
                             onClick={toggleSidebar}
-                            className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                            className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:scale-110 boring:hover:scale-100 transition-all duration-200 boring:transition-none"
                         >
                             <PanelLeftClose size={20} />
                         </Button>
                     </div>
 
                     <Button
-                        className="w-full justify-start gap-2 bg-pink-600 hover:bg-pink-700 text-white shadow-lg shadow-pink-900/20"
+                        className="w-full justify-start gap-2 bg-teal-600 dark:bg-pink-600 boring:bg-neutral-600 hover:bg-teal-700 dark:hover:bg-pink-700 boring:hover:bg-neutral-700 text-white shadow-lg shadow-teal-900/20 dark:shadow-pink-900/20 boring:shadow-none hover:shadow-teal-900/40 dark:hover:shadow-pink-900/40 boring:hover:shadow-none hover:scale-105 boring:hover:scale-100 transition-all duration-200"
                         size="lg"
                         onClick={startNewChat}
                     >
@@ -133,7 +133,7 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
                                         <div
                                             key={conv.id}
                                             className={cn(
-                                                "grid grid-cols-[1fr_auto] items-center py-2 px-3 w-full text-left font-normal cursor-pointer group transition-colors gap-2 rounded-md",
+                                                "grid grid-cols-[1fr_auto] items-center py-2 px-3 w-full text-left font-normal cursor-pointer group transition-all duration-200 boring:transition-none gap-2 hover:scale-[1.02] boring:hover:scale-100",
                                                 conv.id === conversationId
                                                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
                                                     : "text-sidebar-foreground hover:bg-sidebar-accent/50",
@@ -148,7 +148,7 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
                                                 </span>
                                             </div>
                                             <button
-                                                className="h-8 w-8 flex items-center justify-center rounded-md bg-destructive/5 hover:bg-destructive/15 hover:text-destructive transition-all border border-destructive/20 hover:border-destructive/40 text-destructive/70"
+                                                className="h-8 w-8 flex items-center justify-center bg-destructive/5 hover:bg-destructive/15 hover:text-destructive transition-all duration-200 boring:transition-none border border-destructive/20 hover:border-destructive/40 text-destructive/70 hover:scale-110 boring:hover:scale-100"
                                                 onClick={(e) => handleDeleteConversation(e, conv.id)}
                                                 title="Delete conversation"
                                                 aria-label="Delete conversation"
@@ -177,17 +177,17 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
                                 {/* Settings Button */}
                                 <Button
                                     variant="ghost"
-                                    className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent"
+                                    className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent hover:scale-105 boring:hover:scale-100 transition-all duration-200 boring:transition-none"
                                     onClick={() => setSettingsOpen(true)}
                                 >
                                     <Settings size={18} />
                                     Settings
                                 </Button>
 
-                                <div className="flex items-center gap-3 p-2 bg-sidebar-accent/30">
+                                <div className="flex items-center gap-3 p-2 bg-sidebar-accent/30 transition-all duration-200 boring:transition-none hover:bg-sidebar-accent/50">
                                     <Avatar className="h-8 w-8">
                                         <AvatarImage src={user?.imageUrl} alt={user?.fullName || ''} />
-                                        <AvatarFallback className="bg-pink-600 text-white text-xs">
+                                        <AvatarFallback className="bg-teal-600 dark:bg-pink-600 boring:bg-neutral-600 text-white text-xs">
                                             {user?.firstName?.[0] || user?.emailAddresses?.[0]?.emailAddress?.[0]?.toUpperCase() || '?'}
                                         </AvatarFallback>
                                     </Avatar>
@@ -203,7 +203,7 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                            className="h-8 w-8 text-muted-foreground hover:text-foreground hover:scale-110 boring:hover:scale-100 transition-all duration-200 boring:transition-none"
                                         >
                                             <LogOut size={16} />
                                         </Button>
@@ -212,7 +212,7 @@ export function Sidebar({ isOpen, toggleSidebar }: SidebarProps) {
                             </>
                         ) : (
                             <SignInButton mode="modal">
-                                <Button variant="ghost" className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent">
+                                <Button variant="ghost" className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent hover:scale-105 boring:hover:scale-100 transition-all duration-200 boring:transition-none">
                                     <LogIn size={18} />
                                     Login
                                 </Button>
