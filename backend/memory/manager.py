@@ -34,12 +34,24 @@ class MemoryManager:
         self._collection = self._db["memory_store"]
     
     def save_memory(self, key: str, value: dict[str, Any]) -> None:
-        """Save a memory item to the store."""
-        self.store.put(
-            namespace=self.namespace,
-            key=key,
-            value=value,
-        )
+        """Save a memory item to the store with retry logic."""
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                # Refresh store reference on retry
+                if attempt > 0:
+                    self.store = get_memory_store()
+                
+                self.store.put(
+                    namespace=self.namespace,
+                    key=key,
+                    value=value,
+                )
+                return  # Success
+            except Exception as e:
+                print(f"[MemoryManager] save_memory attempt {attempt + 1} failed: {e}", flush=True)
+                if attempt >= max_retries:
+                    raise  # Re-raise on final attempt
     
     def get_memory(self, key: str) -> Any:
         """Retrieve a specific memory item."""

@@ -228,3 +228,84 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ================================================================
+   Streaming UX Animations
+   ================================================================ */
+
+/* Thinking dots: staggered bounce for the 3-dot indicator */
+@keyframes thinking-bounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
+/* Streaming cursor: step-function blink (hard on/off) */
+@keyframes cursor-blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Streaming cursor via ::after pseudo-element.
+   Targets the last leaf element inside the prose wrapper
+   when the .streaming-active class is present. */
+
+/* Level 1: cursor after the last direct child (<p>, <blockquote>) */
+.streaming-active > :last-child::after {
+  content: '\258A';
+  animation: cursor-blink 1s step-end infinite;
+  color: var(--foreground);
+  margin-left: 2px;
+  font-weight: normal;
+}
+
+/* Level 2: push cursor deeper if last child has element children
+   (<ul>/<ol> -> <li>, etc.) */
+.streaming-active > :last-child:has(> *)::after {
+  content: none;
+}
+.streaming-active > :last-child > :last-child::after {
+  content: '\258A';
+  animation: cursor-blink 1s step-end infinite;
+  color: var(--foreground);
+  margin-left: 2px;
+  font-weight: normal;
+}
+
+/* Level 3: one more level deep for nested lists or code spans */
+.streaming-active > :last-child > :last-child:has(> *)::after {
+  content: none;
+}
+.streaming-active > :last-child > :last-child > :last-child::after {
+  content: '\258A';
+  animation: cursor-blink 1s step-end infinite;
+  color: var(--foreground);
+  margin-left: 2px;
+  font-weight: normal;
+}
+
+/* ----------------------------------------------------------------
+   Boring mode: disable streaming animations
+   ---------------------------------------------------------------- */
+
+.boring .thinking-dot {
+  animation: none !important;
+  transform: none !important;
+  opacity: 0.6 !important;
+}
+
+.boring .streaming-active > :last-child::after,
+.boring .streaming-active > :last-child > :last-child::after,
+.boring .streaming-active > :last-child > :last-child > :last-child::after {
+  animation: none !important;
+  opacity: 0.6 !important;
+}

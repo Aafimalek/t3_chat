@@ -136,44 +136,49 @@ async def update_about_you(user_id: str, about: AboutYou) -> AboutYou:
     )
     
     # Also save core facts to memory for the LLM to use
-    memory_manager = MemoryManager(user_id)
-    now = datetime.utcnow().isoformat()
-    
-    # Save nickname as a core memory
-    if about.nickname:
-        memory_manager.save_memory(
-            key="core_nickname",
-            value={
-                "type": "core_fact",
-                "content": f"User's name/nickname is {about.nickname}",
-                "source": "settings",
-                "created_at": now,
-            }
-        )
-    
-    # Save occupation
-    if about.occupation:
-        memory_manager.save_memory(
-            key="core_occupation",
-            value={
-                "type": "core_fact",
-                "content": f"User works as/is a {about.occupation}",
-                "source": "settings",
-                "created_at": now,
-            }
-        )
-    
-    # Save about text
-    if about.about:
-        memory_manager.save_memory(
-            key="core_about",
-            value={
-                "type": "core_fact",
-                "content": f"About user: {about.about}",
-                "source": "settings",
-                "created_at": now,
-            }
-        )
+    # Wrap in try/except so settings are saved even if memory fails
+    try:
+        memory_manager = MemoryManager(user_id)
+        now = datetime.utcnow().isoformat()
+        
+        # Save nickname as a core memory
+        if about.nickname:
+            memory_manager.save_memory(
+                key="core_nickname",
+                value={
+                    "type": "core_fact",
+                    "content": f"User's name/nickname is {about.nickname}",
+                    "source": "settings",
+                    "created_at": now,
+                }
+            )
+        
+        # Save occupation
+        if about.occupation:
+            memory_manager.save_memory(
+                key="core_occupation",
+                value={
+                    "type": "core_fact",
+                    "content": f"User works as/is a {about.occupation}",
+                    "source": "settings",
+                    "created_at": now,
+                }
+            )
+        
+        # Save about text
+        if about.about:
+            memory_manager.save_memory(
+                key="core_about",
+                value={
+                    "type": "core_fact",
+                    "content": f"About user: {about.about}",
+                    "source": "settings",
+                    "created_at": now,
+                }
+            )
+    except Exception as e:
+        # Log but don't fail - settings are already saved
+        print(f"[WARNING] Failed to save memories for user {user_id}: {e}", flush=True)
     
     return about
 

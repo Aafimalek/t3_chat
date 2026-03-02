@@ -51,6 +51,19 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
         conversationId,
     } = useChat();
 
+    // Derive streaming sub-states from isLoading + last message content
+    const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+    const isWaitingForFirstToken =
+        isLoading &&
+        lastMessage !== null &&
+        lastMessage.role === 'assistant' &&
+        lastMessage.content === '';
+    const isActivelyStreaming =
+        isLoading &&
+        lastMessage !== null &&
+        lastMessage.role === 'assistant' &&
+        lastMessage.content.length > 0;
+
     // Smart auto-scroll logic
     const scrollToBottom = (instant = false) => {
         if (messagesEndRef.current) {
@@ -253,22 +266,43 @@ export function ChatArea({ isSidebarOpen, toggleSidebar }: ChatAreaProps) {
                                                         {message.content}
                                                     </p>
                                                 ) : (
-                                                    <MarkdownRenderer
-                                                        content={message.content}
-                                                    />
+                                                    <>
+                                                        {index === messages.length - 1 && isWaitingForFirstToken ? (
+                                                            <div className="flex items-center gap-1.5 py-1">
+                                                                <span
+                                                                    className="thinking-dot h-2 w-2 rounded-full bg-muted-foreground"
+                                                                    style={{
+                                                                        animation: 'thinking-bounce 1.4s ease-in-out infinite',
+                                                                        animationDelay: '0s',
+                                                                    }}
+                                                                />
+                                                                <span
+                                                                    className="thinking-dot h-2 w-2 rounded-full bg-muted-foreground"
+                                                                    style={{
+                                                                        animation: 'thinking-bounce 1.4s ease-in-out infinite',
+                                                                        animationDelay: '0.2s',
+                                                                    }}
+                                                                />
+                                                                <span
+                                                                    className="thinking-dot h-2 w-2 rounded-full bg-muted-foreground"
+                                                                    style={{
+                                                                        animation: 'thinking-bounce 1.4s ease-in-out infinite',
+                                                                        animationDelay: '0.4s',
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        ) : (
+                                                            <MarkdownRenderer
+                                                                content={message.content}
+                                                                isStreaming={index === messages.length - 1 && isActivelyStreaming}
+                                                            />
+                                                        )}
+                                                    </>
                                                 )}
                                             </div>
                                         </div>
                                     </div>
                                 ))}
-
-                                {isLoading && (
-                                    <div className="flex gap-4 animate-in fade-in duration-300">
-                                        <div className="bg-muted/50 px-4 py-3 border border-border/50">
-                                            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                                        </div>
-                                    </div>
-                                )}
 
                                 {error && (
                                     <div className="flex justify-center">
