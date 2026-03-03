@@ -55,6 +55,7 @@ class ChatResponse(BaseModel):
     response: str = Field(description="The assistant's response")
     conversation_id: str = Field(description="The conversation ID")
     model_used: str = Field(description="The model that generated the response")
+    token_usage: dict = Field(default_factory=dict, description="Token usage stats")
 
 
 # ============================================================================

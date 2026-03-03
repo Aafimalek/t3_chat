@@ -260,7 +260,17 @@ export function ChatProvider({ children }: ChatProviderProps) {
             // Always refresh conversations list to update message count in sidebar
             await refreshConversations();
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to send message');
+            const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
+            
+            // Handle rate limit errors specially
+            if (errorMessage.startsWith('RATE_LIMIT:')) {
+                const parts = errorMessage.split(':');
+                const retryAfter = parseInt(parts[1]) || 60;
+                const minutes = Math.ceil(retryAfter / 60);
+                setError(`Rate limit reached. Please wait ~${minutes} minute${minutes > 1 ? 's' : ''} before sending more messages.`);
+            } else {
+                setError(errorMessage);
+            }
             // Remove the last two messages on error (user + empty assistant)
             setMessages(prev => prev.slice(0, -2));
         } finally {

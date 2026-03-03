@@ -14,9 +14,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from config import get_settings
 from database import close_connections
+from middleware.rate_limiter import limiter, rate_limit_exceeded_handler
 from routes import chat_router, conversations_router, models_router, rag_router
 from routes.users import router as users_router
 
@@ -42,6 +45,11 @@ app = FastAPI(
 settings = get_settings()
 cors_origins = settings.cors_origins_list
 print(f"[CORS] Allowing origins: {cors_origins}", flush=True)
+print(f"[RateLimit] {settings.rate_limit_per_hour} requests/hour per user", flush=True)
+
+# Register rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # Add CORS middleware
 app.add_middleware(

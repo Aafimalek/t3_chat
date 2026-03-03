@@ -4,16 +4,18 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { X, Trash2, Save, Brain } from 'lucide-react';
+import { X, Trash2, Save, Brain, BarChart3 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
     AboutYou,
     MemoryItem,
+    UsageStats,
     getAboutYou,
     updateAboutYou,
     getMemories,
     deleteMemory as apiDeleteMemory,
-    clearMemories
+    clearMemories,
+    getUsageStats,
 } from '@/lib/api';
 
 interface SettingsModalProps {
@@ -23,7 +25,7 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ isOpen, onClose, userId }: SettingsModalProps) {
-    const [activeTab, setActiveTab] = useState<'about' | 'memory'>('about');
+    const [activeTab, setActiveTab] = useState<'about' | 'memory' | 'usage'>('about');
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
@@ -37,6 +39,9 @@ export function SettingsModal({ isOpen, onClose, userId }: SettingsModalProps) {
 
     // Memories state
     const [memories, setMemories] = useState<MemoryItem[]>([]);
+
+    // Usage stats state
+    const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
 
     // Load data on open
     useEffect(() => {
@@ -54,6 +59,10 @@ export function SettingsModal({ isOpen, onClose, userId }: SettingsModalProps) {
             ]);
             setAboutYou(aboutData);
             setMemories(memoriesData);
+
+            // Fetch usage stats separately so failure doesn't block other data
+            const usageData = await getUsageStats(userId);
+            if (usageData) setUsageStats(usageData);
         } catch (err) {
             console.error('Failed to load settings:', err);
         } finally {
@@ -130,6 +139,16 @@ export function SettingsModal({ isOpen, onClose, userId }: SettingsModalProps) {
                         <Brain size={16} />
                         Memory ({memories.length})
                     </button>
+                    <button
+                        className={`px-6 py-3 text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'usage'
+                            ? 'text-pink-500 border-b-2 border-pink-500'
+                            : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                        onClick={() => setActiveTab('usage')}
+                    >
+                        <BarChart3 size={16} />
+                        Usage
+                    </button>
                 </div>
 
                 {/* Content */}
@@ -195,7 +214,7 @@ export function SettingsModal({ isOpen, onClose, userId }: SettingsModalProps) {
                                 </Button>
                             </div>
                         </ScrollArea>
-                    ) : (
+                    ) : activeTab === 'memory' ? (
                         <div className="h-full flex flex-col">
                             <div className="p-4 border-b border-border flex items-center justify-between">
                                 <p className="text-sm text-muted-foreground">
@@ -243,6 +262,99 @@ export function SettingsModal({ isOpen, onClose, userId }: SettingsModalProps) {
                                 </div>
                             </ScrollArea>
                         </div>
+                    ) : (
+                        /* Usage Tab */
+                        <ScrollArea className="h-full">
+                            <div className="p-6 space-y-6">
+                                <p className="text-sm text-muted-foreground">
+                                    Track your token usage and rate limits.
+                                </p>
+
+                                {usageStats ? (
+                                    <>
+                                        {/* Rate Limit Status */}
+                                        <div className="p-4 bg-muted/30 border border-border rounded-md">
+                                            <h3 className="text-sm font-medium mb-3">Rate Limit</h3>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-sm text-muted-foreground">Messages this hour</span>
+                                                <span className="text-sm font-mono">
+                                                    {usageStats.messages_this_hour} / {usageStats.rate_limit_per_hour}
+                                                </span>
+                                            </div>
+                                            <div className="mt-2 w-full bg-muted rounded-full h-2">
+                                                <div
+                                                    className={`h-2 rounded-full transition-all ${
+                                                        usageStats.messages_this_hour / usageStats.rate_limit_per_hour > 0.8
+                                                            ? 'bg-red-500'
+                                                            : usageStats.messages_this_hour / usageStats.rate_limit_per_hour > 0.5
+                                                            ? 'bg-yellow-500'
+                                                            : 'bg-pink-500'
+                                                    }`}
+                                                    style={{
+                                                        width: `${Math.min(100, (usageStats.messages_this_hour / usageStats.rate_limit_per_hour) * 100)}%`,
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Token Stats Grid */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="p-4 bg-muted/30 border border-border rounded-md">
+                                                <p className="text-xs text-muted-foreground uppercase tracking-wide">Today</p>
+                                                <p className="text-xl font-semibold mt-1">{usageStats.tokens_today.toLocaleString()}</p>
+                                                <p className="text-xs text-muted-foreground">tokens</p>
+                                            </div>
+                                            <div className="p-4 bg-muted/30 border border-border rounded-md">
+                                                <p className="text-xs text-muted-foreground uppercase tracking-wide">This Week</p>
+                                                <p className="text-xl font-semibold mt-1">{usageStats.tokens_this_week.toLocaleString()}</p>
+                                                <p className="text-xs text-muted-foreground">tokens</p>
+                                            </div>
+                                            <div className="p-4 bg-muted/30 border border-border rounded-md">
+                                                <p className="text-xs text-muted-foreground uppercase tracking-wide">This Month</p>
+                                                <p className="text-xl font-semibold mt-1">{usageStats.tokens_this_month.toLocaleString()}</p>
+                                                <p className="text-xs text-muted-foreground">tokens</p>
+                                            </div>
+                                            <div className="p-4 bg-muted/30 border border-border rounded-md">
+                                                <p className="text-xs text-muted-foreground uppercase tracking-wide">All Time</p>
+                                                <p className="text-xl font-semibold mt-1">{usageStats.total_tokens.toLocaleString()}</p>
+                                                <p className="text-xs text-muted-foreground">tokens</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Detailed Stats */}
+                                        <div className="p-4 bg-muted/30 border border-border rounded-md space-y-3">
+                                            <h3 className="text-sm font-medium">Details</h3>
+                                            <div className="space-y-2">
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-muted-foreground">Total messages</span>
+                                                    <span className="font-mono">{usageStats.total_messages.toLocaleString()}</span>
+                                                </div>
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-muted-foreground">Messages today</span>
+                                                    <span className="font-mono">{usageStats.messages_today.toLocaleString()}</span>
+                                                </div>
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-muted-foreground">Avg tokens/message</span>
+                                                    <span className="font-mono">{usageStats.avg_tokens_per_message.toLocaleString()}</span>
+                                                </div>
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-muted-foreground">Prompt tokens (all time)</span>
+                                                    <span className="font-mono">{usageStats.total_prompt_tokens.toLocaleString()}</span>
+                                                </div>
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-muted-foreground">Completion tokens (all time)</span>
+                                                    <span className="font-mono">{usageStats.total_completion_tokens.toLocaleString()}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <p className="text-center text-muted-foreground py-8">
+                                        No usage data yet. Start chatting to see stats.
+                                    </p>
+                                )}
+                            </div>
+                        </ScrollArea>
                     )}
                 </div>
             </div>

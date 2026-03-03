@@ -63,6 +63,13 @@ class Settings(BaseSettings):
         """Check if S3 is properly configured."""
         return bool(self.aws_access_key_id and self.aws_secret_access_key and self.s3_bucket_name)
     
+    # Rate Limiting
+    rate_limit_per_hour: int = int(os.getenv("RATE_LIMIT_PER_HOUR", "60"))
+    
+    # Context Window Management
+    context_reserve_tokens: int = int(os.getenv("CONTEXT_RESERVE_TOKENS", "512"))
+    max_output_tokens: int = int(os.getenv("MAX_OUTPUT_TOKENS", "4096"))
+    
     # CORS Configuration
     # Comma-separated list of allowed origins, or "*" for all (not recommended with credentials)
     # Include your Vercel frontend URL here

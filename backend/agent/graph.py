@@ -13,6 +13,7 @@ from agent.llm_provider import get_llm
 from agent.prompts import SYSTEM_PROMPT, MEMORY_EXTRACTION_PROMPT
 from memory.checkpointer import get_checkpointer
 from memory.manager import MemoryManager, extract_facts_from_response
+from utils.context_manager import manage_context
 
 
 # ============================================================================
@@ -32,6 +33,7 @@ class ChatState(TypedDict):
     use_rag: bool
     conversation_id: str
     tool_metadata: dict
+    token_usage: dict
 
 
 # ============================================================================
@@ -135,15 +137,34 @@ REQUIRED FORMAT:
     # Get the LLM
     llm = get_llm(model_name=model_name, streaming=False)
     
+    # Apply context window management — trim/summarize if messages exceed budget
+    trimmed_messages = manage_context(
+        messages=state["messages"],
+        model_name=model_name,
+        system_prompt=system_content,
+    )
+    
     # Prepare messages with system prompt
-    messages = [SystemMessage(content=system_content)] + state["messages"]
+    messages = [SystemMessage(content=system_content)] + trimmed_messages
     
     # Generate response
     response = llm.invoke(messages)
     
+    # Extract token usage from Groq response metadata
+    token_usage = {}
+    if hasattr(response, "response_metadata") and response.response_metadata:
+        usage = response.response_metadata.get("token_usage", {})
+        if usage:
+            token_usage = {
+                "prompt_tokens": usage.get("prompt_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0),
+            }
+    
     return {
         "messages": [response],
         "last_assistant_response": response.content,
+        "token_usage": token_usage,
     }
 
 
@@ -187,8 +208,11 @@ def extract_memories(state: ChatState) -> dict:
     return {}
 
 
-async def generate_response_stream(state: ChatState) -> AsyncIterator[str]:
-    """Generate a streaming response using the LLM."""
+async def generate_response_stream(state: ChatState) -> AsyncIterator[str | dict]:
+    """Generate a streaming response using the LLM.
+    
+    Yields string chunks during generation, then a final dict with token_usage.
+    """
     model_name = state["model_name"]
     memory_context = state.get("memory_context", "")
     tool_context = state.get("tool_context", "")
@@ -233,13 +257,33 @@ REQUIRED FORMAT:
     # Get the LLM with streaming enabled
     llm = get_llm(model_name=model_name, streaming=True)
     
-    # Prepare messages with system prompt
-    messages = [SystemMessage(content=system_content)] + state["messages"]
+    # Apply context window management
+    trimmed_messages = manage_context(
+        messages=state["messages"],
+        model_name=model_name,
+        system_prompt=system_content,
+    )
     
-    # Stream the response
+    # Prepare messages with system prompt
+    messages = [SystemMessage(content=system_content)] + trimmed_messages
+    
+    # Stream the response and capture token usage from last chunk
+    token_usage = {}
     async for chunk in llm.astream(messages):
+        # Try to extract token usage from chunk metadata (Groq sends on last chunk)
+        if hasattr(chunk, "response_metadata") and chunk.response_metadata:
+            usage = chunk.response_metadata.get("token_usage", {})
+            if usage:
+                token_usage = {
+                    "prompt_tokens": usage.get("prompt_tokens", 0),
+                    "completion_tokens": usage.get("completion_tokens", 0),
+                    "total_tokens": usage.get("total_tokens", 0),
+                }
         if chunk.content:
             yield chunk.content
+    
+    # Yield token usage as a dict at the end of stream
+    yield {"token_usage": token_usage}
 
 
 # ============================================================================
@@ -280,7 +324,7 @@ def invoke_chat(
     model_name: str | None = None,
     tool_mode: str = "auto",
     use_rag: bool = True,
-) -> tuple[str, list, dict]:
+) -> tuple[str, list, dict, dict]:
     """
     Invoke the chat graph with a message.
     
@@ -293,7 +337,7 @@ def invoke_chat(
         use_rag: Whether to use RAG
         
     Returns:
-        Tuple of (response_text, all_messages, tool_metadata)
+        Tuple of (response_text, all_messages, tool_metadata, token_usage)
     """
     from config import DEFAULT_MODEL
     
@@ -314,6 +358,7 @@ def invoke_chat(
             "use_rag": use_rag,
             "conversation_id": conversation_id,
             "tool_metadata": {},
+            "token_usage": {},
         },
         config=config,
     )
@@ -322,8 +367,9 @@ def invoke_chat(
     messages = result["messages"]
     response = messages[-1].content if messages else ""
     tool_metadata = result.get("tool_metadata", {})
+    token_usage = result.get("token_usage", {})
     
-    return response, messages, tool_metadata
+    return response, messages, tool_metadata, token_usage
 
 
 async def stream_chat(
@@ -346,7 +392,7 @@ async def stream_chat(
         use_rag: Whether to use RAG
         
     Yields:
-        Response chunks as they're generated, then tool metadata dict
+        Response chunks as they're generated, then metadata dicts
     """
     from config import DEFAULT_MODEL
     from agent.tools import get_tool_context
@@ -357,6 +403,19 @@ async def stream_chat(
     print(f"  - conversation_id: {conversation_id}")
     print(f"  - tool_mode: {tool_mode}")
     print(f"  - use_rag: {use_rag}")
+    
+    # Load conversation history from checkpointer for multi-turn context
+    graph = create_chat_graph()
+    config = {"configurable": {"thread_id": conversation_id}}
+    
+    prior_messages = []
+    try:
+        checkpoint_state = graph.get_state(config)
+        if checkpoint_state and checkpoint_state.values:
+            prior_messages = checkpoint_state.values.get("messages", [])
+            print(f"[stream_chat] Loaded {len(prior_messages)} prior messages from checkpointer", flush=True)
+    except Exception as e:
+        print(f"[stream_chat] Could not load prior messages: {e}", flush=True)
     
     # First, load memories
     memory_manager = MemoryManager(user_id)
@@ -372,9 +431,12 @@ async def stream_chat(
     )
     print(f"[stream_chat] Got tool_context length: {len(tool_context)}, metadata: {tool_metadata}")
     
+    # Build message list: prior conversation + new user message
+    all_messages = prior_messages + [HumanMessage(content=message)]
+    
     # Create state
     state = ChatState(
-        messages=[HumanMessage(content=message)],
+        messages=all_messages,
         user_id=user_id,
         model_name=model_name or DEFAULT_MODEL,
         memory_context=memory_context,
@@ -385,22 +447,24 @@ async def stream_chat(
         use_rag=use_rag,
         conversation_id=conversation_id,
         tool_metadata=tool_metadata,
+        token_usage={},
     )
     
     # Stream the response
     full_response = ""
+    token_usage = {}
     async for chunk in generate_response_stream(state):
+        # Check if this is the token_usage dict from the end of stream
+        if isinstance(chunk, dict) and "token_usage" in chunk:
+            token_usage = chunk["token_usage"]
+            continue
         full_response += chunk
         yield chunk
     
-    # Yield tool metadata at the end
-    yield {"tool_metadata": tool_metadata}
+    # Yield tool metadata and token usage at the end
+    yield {"tool_metadata": tool_metadata, "token_usage": token_usage}
     
     # After streaming, save to graph for persistence and extract memories
-    graph = create_chat_graph()
-    config = {"configurable": {"thread_id": conversation_id}}
-    
-    # Update the graph state with the full conversation
     graph.invoke(
         {
             "messages": [
@@ -417,6 +481,7 @@ async def stream_chat(
             "use_rag": use_rag,
             "conversation_id": conversation_id,
             "tool_metadata": tool_metadata,
+            "token_usage": {},
         },
         config=config,
     )

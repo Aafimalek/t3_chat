@@ -88,7 +88,7 @@ export async function sendMessage(request: ChatRequest): Promise<ChatResponse> {
  */
 export async function* streamMessage(
     request: ChatRequest
-): AsyncGenerator<string | { conversation_id: string; model_used: string; tool_metadata?: ToolMetadata }, void, unknown> {
+): AsyncGenerator<string | { conversation_id: string; model_used: string; tool_metadata?: ToolMetadata; token_usage?: TokenUsage }, void, unknown> {
     console.log('[streamMessage] Starting with request:', {
         message: request.message.substring(0, 50),
         conversation_id: request.conversation_id,
@@ -100,6 +100,12 @@ export async function* streamMessage(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
     });
+
+    if (response.status === 429) {
+        const errorData = await response.json().catch(() => ({}));
+        const retryAfter = errorData.retry_after || 60;
+        throw new Error(`RATE_LIMIT:${retryAfter}:${errorData.limit || '60 per hour'}`);
+    }
 
     if (!response.ok) {
         throw new Error(`Stream request failed: ${response.statusText}`);
@@ -344,6 +350,25 @@ export async function clearMemories(userId: string): Promise<void> {
     }
 }
 
+/**
+ * Get user's usage statistics
+ */
+export async function getUsageStats(userId: string): Promise<UsageStats | null> {
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/api/users/${encodeURIComponent(userId)}/usage`
+        );
+        if (!response.ok) {
+            console.warn(`Failed to fetch usage stats: ${response.statusText}`);
+            return null;
+        }
+        return response.json();
+    } catch (err) {
+        console.warn('Failed to fetch usage stats:', err);
+        return null;
+    }
+}
+
 // ============================================================================
 // RAG Document Types
 // ============================================================================
@@ -376,6 +401,26 @@ export interface ToolMetadata {
     rag_used?: boolean;
     search_query?: string;
     rag_chunks?: number;
+}
+
+export interface TokenUsage {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+}
+
+export interface UsageStats {
+    total_tokens: number;
+    total_prompt_tokens: number;
+    total_completion_tokens: number;
+    total_messages: number;
+    avg_tokens_per_message: number;
+    tokens_today: number;
+    tokens_this_week: number;
+    tokens_this_month: number;
+    messages_today: number;
+    messages_this_hour: number;
+    rate_limit_per_hour: number;
 }
 
 // ============================================================================

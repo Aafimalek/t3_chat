@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from memory.manager import MemoryManager
 from database import get_database
+from config import get_settings
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
@@ -237,3 +238,128 @@ async def clear_user_memories(user_id: str) -> dict:
     memory_manager = MemoryManager(user_id)
     count = memory_manager.clear_all_memories()
     return {"message": f"Cleared {count} memories"}
+
+
+# ============================================================================
+# Usage Stats Endpoints
+# ============================================================================
+
+@router.get("/{user_id}/usage")
+async def get_usage_stats(user_id: str) -> dict:
+    """
+    Get token usage statistics for a user.
+    
+    Aggregates from all conversations:
+    - Total tokens (all time)
+    - Tokens today / this week / this month
+    - Messages today / this hour
+    - Average tokens per message
+    """
+    db = await get_database()
+    conversations = db["conversations"]
+    
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    hour_start = now.replace(minute=0, second=0, microsecond=0)
+    week_start = today_start - __import__("datetime").timedelta(days=now.weekday())
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # Aggregation pipeline to extract token usage from messages
+    pipeline = [
+        {"$match": {"user_id": user_id}},
+        {"$unwind": "$messages"},
+        {"$match": {"messages.role": "assistant"}},
+        {
+            "$project": {
+                "timestamp": "$messages.timestamp",
+                "prompt_tokens": {"$ifNull": ["$messages.token_usage.prompt_tokens", 0]},
+                "completion_tokens": {"$ifNull": ["$messages.token_usage.completion_tokens", 0]},
+                "total_tokens": {"$ifNull": ["$messages.token_usage.total_tokens", 0]},
+            }
+        },
+        {
+            "$group": {
+                "_id": None,
+                "total_tokens_all_time": {"$sum": "$total_tokens"},
+                "total_prompt_tokens": {"$sum": "$prompt_tokens"},
+                "total_completion_tokens": {"$sum": "$completion_tokens"},
+                "total_messages": {"$sum": 1},
+                "tokens_today": {
+                    "$sum": {
+                        "$cond": [{"$gte": ["$timestamp", today_start]}, "$total_tokens", 0]
+                    }
+                },
+                "tokens_this_week": {
+                    "$sum": {
+                        "$cond": [{"$gte": ["$timestamp", week_start]}, "$total_tokens", 0]
+                    }
+                },
+                "tokens_this_month": {
+                    "$sum": {
+                        "$cond": [{"$gte": ["$timestamp", month_start]}, "$total_tokens", 0]
+                    }
+                },
+                "messages_today": {
+                    "$sum": {
+                        "$cond": [{"$gte": ["$timestamp", today_start]}, 1, 0]
+                    }
+                },
+                "messages_this_hour": {
+                    "$sum": {
+                        "$cond": [{"$gte": ["$timestamp", hour_start]}, 1, 0]
+                    }
+                },
+            }
+        },
+    ]
+    
+    try:
+        result = await conversations.aggregate(pipeline).to_list(1)
+        
+        if result:
+            stats = result[0]
+            total_messages = stats.get("total_messages", 0)
+            total_tokens = stats.get("total_tokens_all_time", 0)
+            
+            return {
+                "total_tokens": total_tokens,
+                "total_prompt_tokens": stats.get("total_prompt_tokens", 0),
+                "total_completion_tokens": stats.get("total_completion_tokens", 0),
+                "total_messages": total_messages,
+                "avg_tokens_per_message": round(total_tokens / total_messages) if total_messages > 0 else 0,
+                "tokens_today": stats.get("tokens_today", 0),
+                "tokens_this_week": stats.get("tokens_this_week", 0),
+                "tokens_this_month": stats.get("tokens_this_month", 0),
+                "messages_today": stats.get("messages_today", 0),
+                "messages_this_hour": stats.get("messages_this_hour", 0),
+                "rate_limit_per_hour": get_settings().rate_limit_per_hour,
+            }
+        
+        return {
+            "total_tokens": 0,
+            "total_prompt_tokens": 0,
+            "total_completion_tokens": 0,
+            "total_messages": 0,
+            "avg_tokens_per_message": 0,
+            "tokens_today": 0,
+            "tokens_this_week": 0,
+            "tokens_this_month": 0,
+            "messages_today": 0,
+            "messages_this_hour": 0,
+            "rate_limit_per_hour": get_settings().rate_limit_per_hour,
+        }
+    except Exception as e:
+        print(f"[Usage] Error getting usage stats: {e}", flush=True)
+        return {
+            "total_tokens": 0,
+            "total_prompt_tokens": 0,
+            "total_completion_tokens": 0,
+            "total_messages": 0,
+            "avg_tokens_per_message": 0,
+            "tokens_today": 0,
+            "tokens_this_week": 0,
+            "tokens_this_month": 0,
+            "messages_today": 0,
+            "messages_this_hour": 0,
+            "rate_limit_per_hour": get_settings().rate_limit_per_hour,
+        }

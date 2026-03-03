@@ -34,6 +34,12 @@ httpx
 beautifulsoup4
 lxml
 
+# Rate Limiting
+slowapi
+
+# Token Counting
+tiktoken
+
 # Utilities
 python-dotenv
 sse-starlette
