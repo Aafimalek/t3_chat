@@ -152,7 +152,7 @@ export function SettingsModal({ isOpen, onClose, userId }: SettingsModalProps) {
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-hidden">
+                <div className="flex-1 min-h-0 overflow-hidden">
                     {loading ? (
                         <div className="flex items-center justify-center h-full">
                             <p className="text-muted-foreground">Loading...</p>
@@ -264,7 +264,7 @@ export function SettingsModal({ isOpen, onClose, userId }: SettingsModalProps) {
                         </div>
                     ) : (
                         /* Usage Tab */
-                        <ScrollArea className="h-full">
+                        <ScrollArea className="h-[calc(80vh-10rem)] overflow-hidden">
                             <div className="p-6 space-y-6">
                                 <p className="text-sm text-muted-foreground">
                                     Track your token usage and rate limits.
