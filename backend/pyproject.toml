@@ -31,4 +31,6 @@ dependencies = [
     "beautifulsoup4>=4.14.3",
     "lxml>=6.0.2",
     "boto3>=1.42.28",
+    "slowapi>=0.1.9",
+    "tiktoken>=0.7.0",
 ]
