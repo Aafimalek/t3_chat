@@ -160,6 +160,28 @@ REQUIRED FORMAT:
                 "completion_tokens": usage.get("completion_tokens", 0),
                 "total_tokens": usage.get("total_tokens", 0),
             }
+    # Also check usage_metadata (newer langchain-core versions)
+    if not token_usage and hasattr(response, "usage_metadata") and response.usage_metadata:
+        um = response.usage_metadata
+        if hasattr(um, "input_tokens") and um.input_tokens:
+            token_usage = {
+                "prompt_tokens": um.input_tokens,
+                "completion_tokens": um.output_tokens or 0,
+                "total_tokens": (um.input_tokens or 0) + (um.output_tokens or 0),
+            }
+    # Fallback: count with tiktoken if provider didn't supply usage
+    if not token_usage or not token_usage.get("total_tokens"):
+        from utils.token_counter import count_tokens, count_messages_tokens
+        prompt_tokens = count_messages_tokens(messages)
+        completion_tokens = count_tokens(response.content)
+        token_usage = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        }
+        print(f"[TokenUsage] Fallback tiktoken count: {token_usage}", flush=True)
+    else:
+        print(f"[TokenUsage] From provider metadata: {token_usage}", flush=True)
     
     return {
         "messages": [response],
@@ -269,6 +291,7 @@ REQUIRED FORMAT:
     
     # Stream the response and capture token usage from last chunk
     token_usage = {}
+    full_response_text = ""
     async for chunk in llm.astream(messages):
         # Try to extract token usage from chunk metadata (Groq sends on last chunk)
         if hasattr(chunk, "response_metadata") and chunk.response_metadata:
@@ -279,8 +302,32 @@ REQUIRED FORMAT:
                     "completion_tokens": usage.get("completion_tokens", 0),
                     "total_tokens": usage.get("total_tokens", 0),
                 }
+        # Also check usage_metadata (newer langchain-core versions)
+        if not token_usage and hasattr(chunk, "usage_metadata") and chunk.usage_metadata:
+            um = chunk.usage_metadata
+            if hasattr(um, "input_tokens") and um.input_tokens:
+                token_usage = {
+                    "prompt_tokens": um.input_tokens,
+                    "completion_tokens": um.output_tokens or 0,
+                    "total_tokens": (um.input_tokens or 0) + (um.output_tokens or 0),
+                }
         if chunk.content:
+            full_response_text += chunk.content
             yield chunk.content
+    
+    # Fallback: if provider didn't supply token usage, count with tiktoken
+    if not token_usage or not token_usage.get("total_tokens"):
+        from utils.token_counter import count_tokens, count_messages_tokens
+        prompt_tokens = count_messages_tokens(messages)
+        completion_tokens = count_tokens(full_response_text)
+        token_usage = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        }
+        print(f"[TokenUsage] Fallback tiktoken count: {token_usage}", flush=True)
+    else:
+        print(f"[TokenUsage] From provider metadata: {token_usage}", flush=True)
     
     # Yield token usage as a dict at the end of stream
     yield {"token_usage": token_usage}
