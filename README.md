@@ -228,7 +228,7 @@ flowchart TB
 
     User -->|"HTTPS"| Vercel
     User -->|"HTTPS"| Route53
-    Route53 -->|"api.manimancer.fun"| Nginx
+    Route53 -->|"t3-api.manimancer.fun"| Nginx
     NextJS -->|"API Calls"| Nginx
     Nginx -->|"Proxy Pass :8000"| FastAPI
     FastAPI --> Ollama
@@ -244,7 +244,7 @@ flowchart TB
 | Component | Platform | URL |
 |-----------|----------|-----|
 | **Frontend** | Vercel | Auto-deployed on push |
-| **Backend** | AWS EC2 | `https://api.manimancer.fun` |
+| **Backend** | AWS EC2 | `https://t3-api.manimancer.fun` |
 | **Database** | MongoDB Atlas | Cloud-hosted |
 | **File Storage** | AWS S3 | PDF documents |
 | **DNS** | AWS Route 53 | Domain management |
@@ -1067,7 +1067,7 @@ CLERK_SECRET_KEY=sk_test_...
 
 | Variable | Value |
 |----------|-------|
-| `NEXT_PUBLIC_API_URL` | `https://api.manimancer.fun` |
+| `NEXT_PUBLIC_API_URL` | `https://t3-api.manimancer.fun` |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Your Clerk publishable key |
 | `CLERK_SECRET_KEY` | Your Clerk secret key |
 

@@ -4,7 +4,7 @@
 
 // Use environment variable for API URL
 // In development: http://localhost:8000
-// In production: https://api.manimancer.fun
+// In production: https://t3-api.manimancer.fun
 const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // Remove trailing slash to prevent double-slash issues (e.g., https://api.example.com//api/chat)
